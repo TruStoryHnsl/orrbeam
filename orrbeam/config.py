@@ -47,7 +47,9 @@ class Config:
     api_port: int = DEFAULT_API_PORT
     api_bind: str = "0.0.0.0"
     discovery_enabled: bool = True
-    tailscale_enabled: bool = True
+    orrtellite_enabled: bool = True
+    orrtellite_url: str = ""
+    orrtellite_api_key: str = ""
     mdns_enabled: bool = True
     sunshine_path: str = ""
     moonlight_path: str = ""
@@ -59,6 +61,9 @@ class Config:
             with open(CONFIG_FILE) as f:
                 data = yaml.safe_load(f) or {}
             nodes_raw = data.pop("static_nodes", [])
+            # Drop unknown keys (e.g. old tailscale_enabled)
+            valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+            data = {k: v for k, v in data.items() if k in valid_fields}
             nodes = [NodeEntry(**n) for n in nodes_raw]
             return cls(**data, static_nodes=nodes)
         return cls()
@@ -70,7 +75,9 @@ class Config:
             "api_port": self.api_port,
             "api_bind": self.api_bind,
             "discovery_enabled": self.discovery_enabled,
-            "tailscale_enabled": self.tailscale_enabled,
+            "orrtellite_enabled": self.orrtellite_enabled,
+            "orrtellite_url": self.orrtellite_url,
+            "orrtellite_api_key": self.orrtellite_api_key,
             "mdns_enabled": self.mdns_enabled,
             "sunshine_path": self.sunshine_path,
             "moonlight_path": self.moonlight_path,

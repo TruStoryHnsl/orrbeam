@@ -27,14 +27,14 @@ Orrbeam:
 
 1. **Local Sunshine instance** — ensures it's running, configured, ports open
 2. **Local Moonlight instance** — available for outbound connections
-3. **Node registry** — knows about all other orrbeam nodes on the network (via mDNS, Tailscale/orrtellite, or manual config)
+3. **Node registry** — knows about all other orrbeam nodes on the network (via mDNS, orrtellite, or manual config)
 4. **Pairing** — automates the Sunshine PIN pairing process between nodes
 5. **Connection UI** — single interface to browse available nodes and connect/disconnect
 
 ### Node Discovery
 
 Nodes find each other via (in priority order):
-1. **Tailscale/orrtellite mesh** — if machines are on the same Tailscale/Headscale network, use those IPs
+1. **orrtellite mesh** — if machines are on the orrtellite mesh, use Headscale mesh IPs
 2. **LAN mDNS** — broadcast `_orrbeam._tcp` service for local discovery
 3. **Manual config** — `~/.config/orrbeam/nodes.yaml` for static entries
 

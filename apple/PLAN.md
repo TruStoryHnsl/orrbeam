@@ -6,7 +6,7 @@ Native SwiftUI app for iOS and iPad that serves as a Moonlight client companion 
 
 ## What the app does
 
-1. **Discovers orrbeam nodes** on the local network (Bonjour/mDNS) and via Tailscale
+1. **Discovers orrbeam nodes** on the local network (Bonjour/mDNS) and via orrtellite
 2. **Shows a node list** with status (online/offline/hosting), GPU info, and capabilities
 3. **Initiates connections** — taps a node to connect via Moonlight
 4. **Manages pairing** — handles the Sunshine PIN pairing flow
@@ -29,7 +29,7 @@ OrrbeamApp/
 │   └── MeshConfig.swift             # App configuration + persistence
 ├── Services/
 │   ├── BonjourDiscovery.swift       # NetServiceBrowser for _orrbeam._tcp
-│   ├── TailscaleDiscovery.swift     # Poll Tailscale VPN peers
+│   ├── OrrtelliteDiscovery.swift     # Query Headscale API for mesh peers
 │   ├── NodeAPIClient.swift          # HTTP client for orrbeam daemon REST API
 │   └── MoonlightLauncher.swift      # Open moonlight:// URLs or Moonlight app
 ├── ViewModels/
@@ -39,7 +39,7 @@ OrrbeamApp/
 │   ├── MeshView.swift               # Main node list (grid on iPad, list on iPhone)
 │   ├── NodeCard.swift               # Node card component (name, status, GPU)
 │   ├── NodeDetailView.swift         # Detail: connect button, pairing, apps
-│   ├── SettingsView.swift           # Config: Tailscale toggle, static nodes
+│   ├── SettingsView.swift           # Config: orrtellite toggle, static nodes
 │   └── PairingSheet.swift           # PIN entry sheet for Sunshine pairing
 ├── Assets.xcassets/
 └── Info.plist
@@ -60,13 +60,19 @@ browser.browseResultsChangedHandler = { results, changes in
 browser.start(queue: .main)
 ```
 
-### 2. Tailscale Discovery
+### 2. orrtellite Discovery
 
-Two approaches, in order of preference:
+Query the Headscale REST API directly from the iOS app:
 
-**A. Tailscale iOS SDK** (if available): The Tailscale iOS app exposes a local API. If the user has Tailscale installed, query its local API for peers.
+```swift
+// GET https://hs.orrtellite.orrgate.com/api/v1/node
+// Authorization: Bearer <api-key>
+// Returns all mesh nodes with IPs (100.64.x.x) and online status
+```
 
-**B. Manual probe**: If Tailscale IPs are configured in settings, probe each for an orrbeam daemon on port 47782. This is the fallback.
+The API key and Headscale URL are stored in app settings. The app then probes each online mesh peer on port 47782 for an orrbeam daemon, same as the Python daemon does.
+
+No Tailscale client needed — the app talks directly to the self-hosted Headscale server.
 
 ### 3. Moonlight Integration
 
@@ -153,7 +159,7 @@ Use `NavigationSplitView` for automatic iPhone/iPad adaptation.
 ### Phase 5: Polish
 1. iPad split view layout
 2. Connection history (UserDefaults or SwiftData)
-3. Settings view (Tailscale toggle, manual nodes)
+3. Settings view (orrtellite toggle, manual nodes)
 4. App icon and launch screen
 
 ## Prerequisites for orrpheus session
@@ -162,7 +168,7 @@ Use `NavigationSplitView` for automatic iPhone/iPad adaptation.
 - [ ] Apple Developer account logged in (for device deployment)
 - [ ] orrbeamd running on orrion (for testing discovery)
 - [ ] Moonlight installed on test iOS device
-- [ ] orrpheus and orrion on same network (LAN or Tailscale)
+- [ ] orrpheus and orrion on same network (LAN or orrtellite)
 
 ## Dependencies
 

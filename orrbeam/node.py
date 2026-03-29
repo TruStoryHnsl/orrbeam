@@ -16,7 +16,7 @@ class NodeState(str, Enum):
 
 class DiscoverySource(str, Enum):
     MDNS = "mdns"
-    TAILSCALE = "tailscale"
+    ORRTELLITE = "orrtellite"
     STATIC = "static"
 
 
@@ -70,7 +70,7 @@ class NodeRegistry:
                 existing.sunshine_available = True
             if node.moonlight_available:
                 existing.moonlight_available = True
-            # Prefer mDNS source over tailscale
+            # Prefer mDNS source over orrtellite
             if node.source == DiscoverySource.MDNS:
                 existing.source = node.source
         else:

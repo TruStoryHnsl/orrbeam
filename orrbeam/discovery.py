@@ -1,10 +1,10 @@
-"""Node discovery via mDNS and Tailscale."""
+"""Node discovery via mDNS and orrtellite (Headscale mesh)."""
 
 import asyncio
 import json
 import logging
-import shutil
 import socket
+import ssl
 
 from zeroconf import IPVersion, Zeroconf, ServiceInfo
 from zeroconf.asyncio import AsyncZeroconf, AsyncServiceBrowser, AsyncServiceInfo
@@ -122,82 +122,107 @@ class MDNSDiscovery:
         return ips
 
 
-class TailscaleDiscovery:
-    """Discover orrbeam nodes on the Tailscale/Headscale network."""
+class OrrtelliteDiscovery:
+    """Discover orrbeam nodes on the orrtellite mesh (Headscale API)."""
 
-    def __init__(self, registry: NodeRegistry, local_name: str) -> None:
+    def __init__(self, registry: NodeRegistry, local_name: str,
+                 headscale_url: str = "", api_key: str = "") -> None:
         self.registry = registry
         self.local_name = local_name
+        self.headscale_url = headscale_url.rstrip("/")
+        self.api_key = api_key
         self._running = False
 
     async def start(self) -> None:
+        if not self.headscale_url or not self.api_key:
+            log.info("orrtellite: no URL or API key configured, skipping mesh discovery")
+            return
         self._running = True
         asyncio.ensure_future(self._poll_loop())
+        log.info("orrtellite: polling %s every 30s", self.headscale_url)
 
     async def stop(self) -> None:
         self._running = False
 
     async def _poll_loop(self) -> None:
+        # Initial scan immediately
+        await self._scan()
         while self._running:
+            await asyncio.sleep(30)
             try:
                 await self._scan()
             except Exception as e:
-                log.debug("Tailscale scan failed: %s", e)
-            await asyncio.sleep(30)
+                log.debug("orrtellite scan failed: %s", e)
 
     async def _scan(self) -> None:
-        ts = shutil.which("tailscale")
-        if not ts:
+        """Query Headscale API for all mesh nodes."""
+        nodes = await self._api_get_nodes()
+        if nodes is None:
             return
 
-        proc = await asyncio.create_subprocess_exec(
-            ts, "status", "--json",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        stdout, _ = await proc.communicate()
-        if proc.returncode != 0:
-            return
-
-        data = json.loads(stdout)
-        peers = data.get("Peer", {})
-
-        for _key, peer in peers.items():
-            if not peer.get("Online", False):
-                continue
-            hostname = peer.get("HostName", "").lower()
-            if not hostname or hostname == self.local_name:
+        for hs_node in nodes:
+            name = hs_node.get("givenName") or hs_node.get("name", "")
+            name = name.lower()
+            if not name or name == self.local_name:
                 continue
 
-            ts_ips = peer.get("TailscaleIPs", [])
-            if not ts_ips:
+            online = hs_node.get("online", False)
+            if not online:
                 continue
 
-            # Prefer IPv4
-            address = ts_ips[0]
-            for ip in ts_ips:
-                if "." in ip:
+            # Get mesh IPs (prefer IPv4 in 100.64.x.x range)
+            ip_addrs = hs_node.get("ipAddresses", [])
+            if not ip_addrs:
+                continue
+
+            address = ip_addrs[0]
+            for ip in ip_addrs:
+                if ip.startswith("100."):
                     address = ip
                     break
 
-            # Probe for orrbeam daemon and get its real node name
+            # Probe for orrbeam daemon
             probe_result = await self._probe(address, DEFAULT_API_PORT)
             if probe_result:
-                real_name = probe_result.get("node", hostname)
-                # Skip if this node is already known via mDNS (mDNS has fingerprint)
+                real_name = probe_result.get("node", name)
+                # Skip if already known via mDNS (mDNS has fingerprint + capabilities)
                 existing = self.registry.get(real_name)
                 if existing and existing.source == DiscoverySource.MDNS:
-                    # Just update the Tailscale address as an alt
                     continue
                 node = Node(
                     name=real_name,
                     address=address,
                     port=DEFAULT_API_PORT,
                     state=NodeState.ONLINE,
-                    source=DiscoverySource.TAILSCALE,
+                    source=DiscoverySource.ORRTELLITE,
                 )
                 self.registry.upsert(node)
-                log.info("Tailscale: found orrbeam node %s at %s", real_name, address)
+                log.info("orrtellite: found orrbeam node %s at %s", real_name, address)
+
+    async def _api_get_nodes(self) -> list[dict] | None:
+        """Fetch node list from Headscale REST API."""
+        import aiohttp
+
+        url = f"{self.headscale_url}/api/v1/node"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+
+        # Allow self-signed certs (common in self-hosted setups)
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, ssl=ssl_ctx,
+                                       timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status != 200:
+                        log.debug("orrtellite API returned %d", resp.status)
+                        return None
+                    data = await resp.json()
+                    return data.get("nodes", [])
+        except Exception as e:
+            log.debug("orrtellite API error: %s", e)
+            return None
 
     async def _probe(self, address: str, port: int) -> dict | None:
         """Check if an orrbeam daemon is running. Returns health JSON or None."""
@@ -210,7 +235,6 @@ class TailscaleDiscovery:
             data = await asyncio.wait_for(reader.read(512), timeout=2.0)
             writer.close()
             await writer.wait_closed()
-            # Parse HTTP response body (after \r\n\r\n)
             body = data.split(b"\r\n\r\n", 1)[-1]
             if b"orrbeam" in body:
                 return json.loads(body)

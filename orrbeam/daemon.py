@@ -10,7 +10,7 @@ from aiohttp import web
 from .config import Config
 from .node import Node, NodeRegistry, NodeState, DiscoverySource
 from .identity import load_identity, get_fingerprint, default_node_name
-from .discovery import MDNSDiscovery, TailscaleDiscovery
+from .discovery import MDNSDiscovery, OrrtelliteDiscovery
 from .platform import get_platform
 
 log = logging.getLogger("orrbeam")
@@ -22,7 +22,7 @@ class OrrbeamDaemon:
         self.platform = get_platform()
         self.registry = NodeRegistry()
         self._mdns: MDNSDiscovery | None = None
-        self._tailscale: TailscaleDiscovery | None = None
+        self._orrtellite: OrrtelliteDiscovery | None = None
         self._app = web.Application()
         self._runner: web.AppRunner | None = None
         self._prune_task: asyncio.Task | None = None
@@ -150,13 +150,17 @@ class OrrbeamDaemon:
                 log.warning("mDNS discovery failed to start: %s (continuing without)", e)
                 self._mdns = None
 
-        if self.config.discovery_enabled and self.config.tailscale_enabled:
+        if self.config.discovery_enabled and self.config.orrtellite_enabled:
             try:
-                self._tailscale = TailscaleDiscovery(self.registry, self.config.node_name)
-                await self._tailscale.start()
+                self._orrtellite = OrrtelliteDiscovery(
+                    self.registry, self.config.node_name,
+                    headscale_url=self.config.orrtellite_url,
+                    api_key=self.config.orrtellite_api_key,
+                )
+                await self._orrtellite.start()
             except Exception as e:
-                log.warning("Tailscale discovery failed to start: %s (continuing without)", e)
-                self._tailscale = None
+                log.warning("orrtellite discovery failed to start: %s (continuing without)", e)
+                self._orrtellite = None
 
         # Stale node pruning
         self._prune_task = asyncio.create_task(self._prune_loop())
@@ -174,8 +178,8 @@ class OrrbeamDaemon:
             self._prune_task.cancel()
         if self._mdns:
             await self._mdns.stop()
-        if self._tailscale:
-            await self._tailscale.stop()
+        if self._orrtellite:
+            await self._orrtellite.stop()
         if self._runner:
             await self._runner.cleanup()
 
