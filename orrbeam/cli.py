@@ -15,7 +15,8 @@ console = Console()
 
 
 def _api_url(config: Config, path: str) -> str:
-    return f"http://{config.api_bind}:{config.api_port}{path}"
+    # CLI always talks to localhost, regardless of daemon bind address
+    return f"http://127.0.0.1:{config.api_port}{path}"
 
 
 def _api_get(config: Config, path: str) -> dict | None:
@@ -276,6 +277,42 @@ def sunshine(ctx: click.Context) -> None:
             console.print("[green]Sunshine started (direct)[/green]")
         else:
             console.print("[red]Failed to start Sunshine[/red]")
+
+
+@main.command()
+@click.argument("target")
+@click.pass_context
+def ping(ctx: click.Context, target: str) -> None:
+    """Ping a remote node's orrbeam daemon."""
+    import time
+    import urllib.request
+
+    config = ctx.obj["config"]
+
+    # Resolve target — try daemon first, then use as raw address
+    address = target
+    if _check_daemon(config):
+        data = _api_get(config, "/api/nodes")
+        if data:
+            for n in data.get("nodes", []):
+                if n["name"] == target:
+                    address = n["address"]
+                    break
+
+    url = f"http://{address}:47782/health"
+    console.print(f"Pinging [cyan]{target}[/cyan] ({address})...")
+
+    for i in range(3):
+        start = time.time()
+        try:
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                data = json.loads(resp.read())
+                ms = (time.time() - start) * 1000
+                console.print(f"  [{i+1}] [green]OK[/green] from {data.get('node', '?')} — {ms:.0f}ms")
+        except Exception as e:
+            ms = (time.time() - start) * 1000
+            console.print(f"  [{i+1}] [red]FAIL[/red] — {ms:.0f}ms ({e})")
+        time.sleep(0.5)
 
 
 @main.command("uninstall")

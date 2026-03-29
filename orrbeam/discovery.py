@@ -21,10 +21,13 @@ SERVICE_TYPE = "_orrbeam._tcp.local."
 class MDNSDiscovery:
     """Broadcast and discover orrbeam nodes via mDNS."""
 
-    def __init__(self, node_name: str, port: int, registry: NodeRegistry) -> None:
+    def __init__(self, node_name: str, port: int, registry: NodeRegistry,
+                 has_sunshine: bool = False, has_moonlight: bool = False) -> None:
         self.node_name = node_name
         self.port = port
         self.registry = registry
+        self._has_sunshine = has_sunshine
+        self._has_moonlight = has_moonlight
         self._zc: AsyncZeroconf | None = None
         self._browser: AsyncServiceBrowser | None = None
         self._info: ServiceInfo | None = None
@@ -32,7 +35,7 @@ class MDNSDiscovery:
     async def start(self) -> None:
         self._zc = AsyncZeroconf(ip_version=IPVersion.V4Only)
 
-        # Register our service
+        # Register our service with capabilities
         fingerprint = get_fingerprint()
         addresses = self._get_local_ips()
         self._info = ServiceInfo(
@@ -43,6 +46,8 @@ class MDNSDiscovery:
             properties={
                 "fingerprint": fingerprint,
                 "version": "0.1.0",
+                "sunshine": "1" if self._has_sunshine else "0",
+                "moonlight": "1" if self._has_moonlight else "0",
             },
         )
         await self._zc.async_register_service(self._info)
@@ -85,6 +90,8 @@ class MDNSDiscovery:
                     fingerprint=props.get("fingerprint", ""),
                     state=NodeState.ONLINE,
                     source=DiscoverySource.MDNS,
+                    sunshine_available=props.get("sunshine") == "1",
+                    moonlight_available=props.get("moonlight") == "1",
                 )
                 self.registry.upsert(node)
                 log.info("mDNS: discovered %s at %s:%d", node_name, address, node.port)
@@ -173,30 +180,40 @@ class TailscaleDiscovery:
                     address = ip
                     break
 
-            # Probe for orrbeam daemon
-            is_orrbeam = await self._probe(address, DEFAULT_API_PORT)
-            if is_orrbeam:
+            # Probe for orrbeam daemon and get its real node name
+            probe_result = await self._probe(address, DEFAULT_API_PORT)
+            if probe_result:
+                real_name = probe_result.get("node", hostname)
+                # Skip if this node is already known via mDNS (mDNS has fingerprint)
+                existing = self.registry.get(real_name)
+                if existing and existing.source == DiscoverySource.MDNS:
+                    # Just update the Tailscale address as an alt
+                    continue
                 node = Node(
-                    name=hostname,
+                    name=real_name,
                     address=address,
                     port=DEFAULT_API_PORT,
                     state=NodeState.ONLINE,
                     source=DiscoverySource.TAILSCALE,
                 )
                 self.registry.upsert(node)
-                log.info("Tailscale: found orrbeam node %s at %s", hostname, address)
+                log.info("Tailscale: found orrbeam node %s at %s", real_name, address)
 
-    async def _probe(self, address: str, port: int) -> bool:
-        """Check if an orrbeam daemon is running at the given address."""
+    async def _probe(self, address: str, port: int) -> dict | None:
+        """Check if an orrbeam daemon is running. Returns health JSON or None."""
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(address, port), timeout=2.0
             )
             writer.write(b"GET /health HTTP/1.0\r\nHost: orrbeam\r\n\r\n")
             await writer.drain()
-            data = await asyncio.wait_for(reader.read(256), timeout=2.0)
+            data = await asyncio.wait_for(reader.read(512), timeout=2.0)
             writer.close()
             await writer.wait_closed()
-            return b"orrbeam" in data
+            # Parse HTTP response body (after \r\n\r\n)
+            body = data.split(b"\r\n\r\n", 1)[-1]
+            if b"orrbeam" in body:
+                return json.loads(body)
+            return None
         except Exception:
-            return False
+            return None

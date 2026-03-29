@@ -24,26 +24,38 @@ def _which(name: str) -> str:
 class MacOSPlatform(Platform):
 
     def detect_sunshine(self) -> ServiceStatus:
-        # Sunshine on macOS: homebrew or manual install
+        # Sunshine on macOS: .app bundle, homebrew, or binary in PATH
         path = _which("sunshine")
         if not path:
             brew_path = "/opt/homebrew/bin/sunshine"
             if os.path.isfile(brew_path):
                 path = brew_path
-        if not path:
+        # Check for .app bundle
+        app_paths = [
+            "/Applications/Sunshine.app",
+            Path.home() / "Applications" / "Sunshine.app",
+        ]
+        app_path = ""
+        for p in app_paths:
+            if Path(p).exists():
+                app_path = str(p)
+                # Find the binary inside the bundle
+                bundle_bin = Path(p) / "Contents" / "MacOS" / "sunshine"
+                if bundle_bin.exists():
+                    path = str(bundle_bin)
+                elif not path:
+                    path = str(p)
+                break
+        if not path and not app_path:
             return ServiceStatus()
 
         version = ""
-        try:
-            r = _run([path, "--version"])
-            version = r.stdout.strip() or r.stderr.strip()
-        except Exception:
-            pass
+        # Don't run --version on macOS (may require GUI context)
 
         pid = None
         running = False
         try:
-            r = _run(["pgrep", "-x", "sunshine"])
+            r = _run(["pgrep", "-f", "Sunshine"])
             if r.returncode == 0:
                 pid = int(r.stdout.strip().split("\n")[0])
                 running = True
@@ -51,7 +63,7 @@ class MacOSPlatform(Platform):
             pass
 
         return ServiceStatus(installed=True, running=running, pid=pid,
-                             version=version, path=path)
+                             version=version, path=path or app_path)
 
     def detect_moonlight(self) -> ServiceStatus:
         # Moonlight on macOS is a .app bundle
@@ -82,15 +94,14 @@ class MacOSPlatform(Platform):
         return ServiceStatus(installed=True, path=path)
 
     def install_sunshine(self) -> bool:
-        if _which("brew"):
-            r = _run(["brew", "install", "--cask", "sunshine"])
-            if r.returncode == 0:
-                return True
-            # Try formula
-            r = _run(["brew", "install", "sunshine"])
-            return r.returncode == 0
-        print("Install Homebrew first, then: brew install --cask sunshine")
-        print("Or download from: https://github.com/LizardByte/Sunshine/releases")
+        # Sunshine is not in Homebrew — must be installed from GitHub releases
+        print("Sunshine must be installed manually on macOS:")
+        print("  Download from: https://github.com/LizardByte/Sunshine/releases")
+        print("  Get the macOS ARM64 DMG and drag Sunshine.app to /Applications")
+        # Check if already installed
+        if Path("/Applications/Sunshine.app").exists():
+            print("  (Sunshine.app is already installed)")
+            return True
         return False
 
     def install_moonlight(self) -> bool:
@@ -101,6 +112,13 @@ class MacOSPlatform(Platform):
         return False
 
     def start_sunshine(self) -> bool:
+        # Try .app bundle first
+        for app_path in ["/Applications/Sunshine.app",
+                         str(Path.home() / "Applications" / "Sunshine.app")]:
+            if Path(app_path).exists():
+                _run(["open", "-a", app_path])
+                return True
+        # Try direct binary
         path = _which("sunshine") or "/opt/homebrew/bin/sunshine"
         if os.path.isfile(path):
             subprocess.Popen([path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -108,20 +126,21 @@ class MacOSPlatform(Platform):
         return False
 
     def stop_sunshine(self) -> bool:
-        _run(["pkill", "-x", "sunshine"])
+        _run(["pkill", "-f", "Sunshine"])
         return True
 
     def start_moonlight(self, address: str, app: str = "Desktop") -> bool:
-        # Try CLI first
+        # Use open -a to launch the macOS app
+        if Path("/Applications/Moonlight.app").exists():
+            # Moonlight on macOS doesn't support CLI streaming args
+            # Open the app — user selects the host from Moonlight's own UI
+            _run(["open", "-a", "Moonlight"])
+            return True
+        # Try CLI
         cli = _which("moonlight") or _which("moonlight-qt")
         if cli:
             subprocess.Popen([cli, "stream", address, app],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True
-        # Try opening .app with stream URL
-        app_path = "/Applications/Moonlight.app"
-        if Path(app_path).exists():
-            _run(["open", "-a", "Moonlight"])
             return True
         return False
 

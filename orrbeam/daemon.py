@@ -136,20 +136,33 @@ class OrrbeamDaemon:
                 source=DiscoverySource.STATIC,
             ))
 
-        # Start discovery
+        # Start discovery (failures are non-fatal — daemon runs without discovery)
+        sun_installed = self.platform.detect_sunshine().installed
+        moon_installed = self.platform.detect_moonlight().installed
         if self.config.discovery_enabled and self.config.mdns_enabled:
-            self._mdns = MDNSDiscovery(self.config.node_name, self.config.api_port, self.registry)
-            await self._mdns.start()
+            try:
+                self._mdns = MDNSDiscovery(
+                    self.config.node_name, self.config.api_port, self.registry,
+                    has_sunshine=sun_installed, has_moonlight=moon_installed,
+                )
+                await self._mdns.start()
+            except Exception as e:
+                log.warning("mDNS discovery failed to start: %s (continuing without)", e)
+                self._mdns = None
 
         if self.config.discovery_enabled and self.config.tailscale_enabled:
-            self._tailscale = TailscaleDiscovery(self.registry, self.config.node_name)
-            await self._tailscale.start()
+            try:
+                self._tailscale = TailscaleDiscovery(self.registry, self.config.node_name)
+                await self._tailscale.start()
+            except Exception as e:
+                log.warning("Tailscale discovery failed to start: %s (continuing without)", e)
+                self._tailscale = None
 
         # Stale node pruning
         self._prune_task = asyncio.create_task(self._prune_loop())
 
-        # Start API server
-        self._runner = web.AppRunner(self._app)
+        # Start API server (suppress access logging)
+        self._runner = web.AppRunner(self._app, access_log=None)
         await self._runner.setup()
         site = web.TCPSite(self._runner, self.config.api_bind, self.config.api_port)
         await site.start()

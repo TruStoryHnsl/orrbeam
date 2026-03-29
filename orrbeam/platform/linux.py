@@ -27,8 +27,9 @@ SYSTEMD_USER_DIR = Path.home() / ".config" / "systemd" / "user"
 SYSTEMD_UNIT_NAME = "orrbeamd.service"
 
 
-def _run(cmd: list[str], check: bool = False, capture: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=capture, text=True, check=check, timeout=30)
+def _run(cmd: list[str], check: bool = False, capture: bool = True,
+         timeout: int = 10) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=capture, text=True, check=check, timeout=timeout)
 
 
 def _which(name: str) -> str:
@@ -71,12 +72,21 @@ class LinuxPlatform(Platform):
         if not path:
             return ServiceStatus()
 
+        # Get version from package manager (sunshine --version works but is slow)
         version = ""
-        try:
-            r = _run([path, "--version"])
-            version = r.stdout.strip() or r.stderr.strip()
-        except Exception:
-            pass
+        if _which("pacman"):
+            try:
+                r = _run(["pacman", "-Q", "sunshine"])
+                if r.returncode == 0:
+                    version = r.stdout.strip().split()[-1]
+            except Exception:
+                pass
+        if not version:
+            try:
+                r = _run([path, "--version"], timeout=5)
+                version = r.stdout.strip() or r.stderr.strip()
+            except Exception:
+                pass
 
         # Check both system and user service
         running = _is_active("sunshine", user=True) or _is_active("sunshine", user=False)
@@ -111,11 +121,23 @@ class LinuxPlatform(Platform):
         if not path:
             return ServiceStatus()
 
+        # moonlight-qt --version opens a GUI — get version from package manager
         version = ""
-        if not path.startswith("flatpak:"):
+        if _which("pacman"):
             try:
-                r = _run([path, "--version"])
-                version = r.stdout.strip()
+                r = _run(["pacman", "-Q", "moonlight-qt"])
+                if r.returncode == 0:
+                    version = r.stdout.strip().split()[-1]
+            except Exception:
+                pass
+        elif _which("dpkg"):
+            try:
+                r = _run(["dpkg", "-s", "moonlight-qt"])
+                if r.returncode == 0:
+                    for line in r.stdout.split("\n"):
+                        if line.startswith("Version:"):
+                            version = line.split(":", 1)[1].strip()
+                            break
             except Exception:
                 pass
 

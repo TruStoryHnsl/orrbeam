@@ -45,7 +45,7 @@ class NodeEntry:
 class Config:
     node_name: str = ""
     api_port: int = DEFAULT_API_PORT
-    api_bind: str = "127.0.0.1"
+    api_bind: str = "0.0.0.0"
     discovery_enabled: bool = True
     tailscale_enabled: bool = True
     mdns_enabled: bool = True
