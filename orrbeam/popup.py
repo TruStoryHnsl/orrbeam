@@ -131,7 +131,8 @@ class OrrbeamPopup:
             name = m["name"]
             res = f"{m['width']}x{m['height']}"
             rot = m.get("rotation", "normal")
-            is_current = (name == self.current_output)
+            idx = m.get("index", 0)
+            is_current = (str(idx) == str(self.current_output) or name == self.current_output)
 
             btn_text = f"{name}  {res}"
             if rot != "normal":

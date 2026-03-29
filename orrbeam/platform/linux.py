@@ -328,6 +328,7 @@ class LinuxPlatform(Platform):
                     name=name, description=name,
                     width=width, height=height, refresh_rate=refresh,
                     rotation=rotation, active=active, primary=primary,
+                    index=len(monitors),
                 ))
             else:
                 i += 1

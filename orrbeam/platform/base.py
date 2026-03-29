@@ -24,11 +24,12 @@ class Monitor:
     rotation: str        # "normal", "left", "right", "inverted"
     active: bool         # currently displaying
     primary: bool        # is the primary display
+    index: int = 0       # Sunshine KMS monitor index (output_name value)
 
     def to_dict(self) -> dict:
         return {
             "name": self.name, "description": self.description,
-            "width": self.width, "height": self.height,
+            "width": self.width, "height": self.height, "index": self.index,
             "refresh_rate": self.refresh_rate, "rotation": self.rotation,
             "active": self.active, "primary": self.primary,
         }

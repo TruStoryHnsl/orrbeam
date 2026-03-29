@@ -212,17 +212,25 @@ class OrrbeamDaemon:
 
     async def _set_display(self, req: web.Request) -> web.Response:
         data = await req.json()
-        output_name = data.get("output_name")
+        output_name = data.get("output_name")  # xrandr name like "DP-3"
+        monitor_index = data.get("monitor_index")  # Sunshine KMS index like 1
         rotation = data.get("rotation")
 
-        if output_name:
-            await asyncio.get_event_loop().run_in_executor(
-                None, sunshine_config.set_output_name, output_name)
+        # Resolve: if output_name given but no index, look up the index
+        if output_name and monitor_index is None:
+            monitors = self.platform.list_monitors()
+            for m in monitors:
+                if m.name == output_name:
+                    monitor_index = m.index
+                    break
 
-        if rotation:
-            target = output_name or sunshine_config.get_output_name() or ""
+        if monitor_index is not None:
             await asyncio.get_event_loop().run_in_executor(
-                None, self.platform.set_rotation, target, rotation)
+                None, sunshine_config.set_output_name, str(monitor_index))
+
+        if rotation and output_name:
+            await asyncio.get_event_loop().run_in_executor(
+                None, self.platform.set_rotation, output_name, rotation)
 
         ok = await asyncio.get_event_loop().run_in_executor(
             None, sunshine_config.restart_sunshine)
