@@ -380,7 +380,7 @@ class OrrbeamDaemon:
                     [self._popup_bin], start_new_session=True)
 
             hotkey = keyboard.HotKey(
-                keyboard.HotKey.parse("<cmd>+o"),
+                keyboard.HotKey.parse("<cmd>+<shift>+o"),
                 _on_hotkey,
             )
 
@@ -394,7 +394,7 @@ class OrrbeamDaemon:
                 on_press=_on_press, on_release=_on_release)
             self._hotkey_listener.daemon = True
             self._hotkey_listener.start()
-            log.info("Global hotkey registered: Super+O → orrbeam popup")
+            log.info("Global hotkey registered: Super+Shift+O → orrbeam popup")
         except Exception as e:
             log.warning("Failed to register hotkey: %s (popup still available via CLI)", e)
 
