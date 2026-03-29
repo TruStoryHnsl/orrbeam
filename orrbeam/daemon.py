@@ -6,6 +6,7 @@ import random
 import signal
 import socket
 import sys
+from pathlib import Path
 
 import aiohttp
 from aiohttp import web
@@ -346,6 +347,57 @@ class OrrbeamDaemon:
         await site.start()
         log.info("API listening on %s:%d", self.config.api_bind, self.config.api_port)
 
+        # Start global hotkey listener for popup (Meta+O)
+        self._start_hotkey_listener()
+
+    def _start_hotkey_listener(self) -> None:
+        """Register a global hotkey that spawns the popup overlay."""
+        try:
+            from pynput import keyboard
+            import shutil
+            import subprocess as _sp
+
+            popup_bin = shutil.which("orrbeam-popup")
+            if not popup_bin:
+                # Fall back to finding it relative to the venv
+                import sys
+                venv_bin = Path(sys.executable).parent / "orrbeam-popup"
+                popup_bin = str(venv_bin) if venv_bin.exists() else None
+
+            if not popup_bin:
+                log.warning("orrbeam-popup not found in PATH, hotkey disabled")
+                return
+
+            self._popup_bin = popup_bin
+            self._popup_proc = None
+
+            def _on_hotkey():
+                # Only spawn if not already open
+                if self._popup_proc and self._popup_proc.poll() is None:
+                    return
+                log.info("Hotkey pressed — opening popup")
+                self._popup_proc = _sp.Popen(
+                    [self._popup_bin], start_new_session=True)
+
+            hotkey = keyboard.HotKey(
+                keyboard.HotKey.parse("<cmd>+o"),
+                _on_hotkey,
+            )
+
+            def _on_press(key):
+                hotkey.press(self._hotkey_listener.canonical(key))
+
+            def _on_release(key):
+                hotkey.release(self._hotkey_listener.canonical(key))
+
+            self._hotkey_listener = keyboard.Listener(
+                on_press=_on_press, on_release=_on_release)
+            self._hotkey_listener.daemon = True
+            self._hotkey_listener.start()
+            log.info("Global hotkey registered: Super+O → orrbeam popup")
+        except Exception as e:
+            log.warning("Failed to register hotkey: %s (popup still available via CLI)", e)
+
     async def stop(self) -> None:
         log.info("Shutting down...")
         if self._prune_task:
@@ -354,6 +406,8 @@ class OrrbeamDaemon:
             await self._mdns.stop()
         if self._orrtellite:
             await self._orrtellite.stop()
+        if hasattr(self, "_hotkey_listener"):
+            self._hotkey_listener.stop()
         if self._runner:
             await self._runner.cleanup()
 
