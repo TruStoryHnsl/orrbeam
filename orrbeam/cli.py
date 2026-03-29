@@ -348,5 +348,19 @@ def menu(ctx: click.Context) -> None:
     app.run()
 
 
+@main.command()
+@click.pass_context
+def popup(ctx: click.Context) -> None:
+    """Launch the floating overlay for in-stream display control.
+
+    Bind this to a hotkey (e.g. Super+O) so you can access it
+    during a Moonlight session without leaving the stream.
+    """
+    from .popup import OrrbeamPopup
+    config = ctx.obj["config"]
+    p = OrrbeamPopup(config)
+    p.run()
+
+
 if __name__ == "__main__":
     main()

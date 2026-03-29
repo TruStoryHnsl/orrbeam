@@ -20,6 +20,7 @@ dependencies = [
 [project.scripts]
 orrbeam = "orrbeam.cli:main"
 orrbeamd = "orrbeam.daemon:main"
+orrbeam-popup = "orrbeam.popup:main"
 
 [tool.ruff]
 target-version = "py310"
