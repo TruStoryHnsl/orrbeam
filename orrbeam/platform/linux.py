@@ -29,7 +29,12 @@ SYSTEMD_UNIT_NAME = "orrbeamd.service"
 
 def _run(cmd: list[str], check: bool = False, capture: bool = True,
          timeout: int = 10) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=capture, text=True, check=check, timeout=timeout)
+    try:
+        return subprocess.run(cmd, capture_output=capture, text=True, check=check, timeout=timeout)
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(cmd, returncode=127, stdout="", stderr="command not found")
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, returncode=124, stdout="", stderr="timeout")
 
 
 def _which(name: str) -> str:

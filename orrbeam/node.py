@@ -56,7 +56,25 @@ class NodeRegistry:
 
     def upsert(self, node: Node) -> None:
         node.last_seen = time.time()
-        self._nodes[node.name] = node
+        existing = self._nodes.get(node.name)
+        if existing and not node.is_local:
+            # Update existing node, preserve fields the new data may not have
+            existing.last_seen = node.last_seen
+            existing.address = node.address
+            existing.port = node.port
+            if node.state != NodeState.OFFLINE:
+                existing.state = node.state
+            if node.fingerprint:
+                existing.fingerprint = node.fingerprint
+            if node.sunshine_available:
+                existing.sunshine_available = True
+            if node.moonlight_available:
+                existing.moonlight_available = True
+            # Prefer mDNS source over tailscale
+            if node.source == DiscoverySource.MDNS:
+                existing.source = node.source
+        else:
+            self._nodes[node.name] = node
 
     def remove(self, name: str) -> None:
         self._nodes.pop(name, None)

@@ -14,7 +14,12 @@ LAUNCHD_PLIST = LAUNCHD_PLIST_DIR / f"{LAUNCHD_LABEL}.plist"
 
 
 def _run(cmd: list[str], check: bool = False) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, check=check, timeout=30)
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, check=check, timeout=30)
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(cmd, returncode=127, stdout="", stderr="command not found")
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, returncode=124, stdout="", stderr="timeout")
 
 
 def _which(name: str) -> str:
