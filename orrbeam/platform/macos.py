@@ -151,9 +151,8 @@ class MacOSPlatform(Platform):
         cli = self.moonlight_cli_path()
         if not cli:
             return False
-        subprocess.Popen([cli, "stream", address, app],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True)
+        # Don't redirect stdout/stderr — Qt needs them for proper GUI initialization
+        subprocess.Popen([cli, "stream", address, app], start_new_session=True)
         return True
 
     def pair_moonlight(self, address: str, pin: str) -> bool:

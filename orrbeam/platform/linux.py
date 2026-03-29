@@ -202,8 +202,8 @@ class LinuxPlatform(Platform):
             # Try flatpak
             r = _run(["flatpak", "run", "com.moonlight_stream.Moonlight", "stream", address, app])
             return r.returncode == 0
-        subprocess.Popen([path, "stream", address, app],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Don't redirect stdout/stderr — Qt needs them for proper GUI initialization
+        subprocess.Popen([path, "stream", address, app], start_new_session=True)
         return True
 
     def stop_moonlight(self) -> bool:
