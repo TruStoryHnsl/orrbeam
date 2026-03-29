@@ -1,0 +1,197 @@
+"""macOS platform implementation."""
+
+import os
+import shutil
+import subprocess
+import plistlib
+from pathlib import Path
+
+from .base import Platform, ServiceStatus
+
+LAUNCHD_PLIST_DIR = Path.home() / "Library" / "LaunchAgents"
+LAUNCHD_LABEL = "com.orrbeam.daemon"
+LAUNCHD_PLIST = LAUNCHD_PLIST_DIR / f"{LAUNCHD_LABEL}.plist"
+
+
+def _run(cmd: list[str], check: bool = False) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True, check=check, timeout=30)
+
+
+def _which(name: str) -> str:
+    return shutil.which(name) or ""
+
+
+class MacOSPlatform(Platform):
+
+    def detect_sunshine(self) -> ServiceStatus:
+        # Sunshine on macOS: homebrew or manual install
+        path = _which("sunshine")
+        if not path:
+            brew_path = "/opt/homebrew/bin/sunshine"
+            if os.path.isfile(brew_path):
+                path = brew_path
+        if not path:
+            return ServiceStatus()
+
+        version = ""
+        try:
+            r = _run([path, "--version"])
+            version = r.stdout.strip() or r.stderr.strip()
+        except Exception:
+            pass
+
+        pid = None
+        running = False
+        try:
+            r = _run(["pgrep", "-x", "sunshine"])
+            if r.returncode == 0:
+                pid = int(r.stdout.strip().split("\n")[0])
+                running = True
+        except Exception:
+            pass
+
+        return ServiceStatus(installed=True, running=running, pid=pid,
+                             version=version, path=path)
+
+    def detect_moonlight(self) -> ServiceStatus:
+        # Moonlight on macOS is a .app bundle
+        app_paths = [
+            "/Applications/Moonlight.app",
+            Path.home() / "Applications" / "Moonlight.app",
+        ]
+        path = ""
+        for p in app_paths:
+            if Path(p).exists():
+                path = str(p)
+                break
+
+        # Also check for CLI
+        cli_path = _which("moonlight") or _which("moonlight-qt")
+        if cli_path:
+            path = path or cli_path
+
+        if not path:
+            # Check homebrew cask
+            r = _run(["brew", "list", "--cask"])
+            if r.returncode == 0 and "moonlight" in r.stdout.lower():
+                path = "/Applications/Moonlight.app"
+
+        if not path:
+            return ServiceStatus()
+
+        return ServiceStatus(installed=True, path=path)
+
+    def install_sunshine(self) -> bool:
+        if _which("brew"):
+            r = _run(["brew", "install", "--cask", "sunshine"])
+            if r.returncode == 0:
+                return True
+            # Try formula
+            r = _run(["brew", "install", "sunshine"])
+            return r.returncode == 0
+        print("Install Homebrew first, then: brew install --cask sunshine")
+        print("Or download from: https://github.com/LizardByte/Sunshine/releases")
+        return False
+
+    def install_moonlight(self) -> bool:
+        if _which("brew"):
+            r = _run(["brew", "install", "--cask", "moonlight"])
+            return r.returncode == 0
+        print("Install Homebrew first, then: brew install --cask moonlight")
+        return False
+
+    def start_sunshine(self) -> bool:
+        path = _which("sunshine") or "/opt/homebrew/bin/sunshine"
+        if os.path.isfile(path):
+            subprocess.Popen([path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        return False
+
+    def stop_sunshine(self) -> bool:
+        _run(["pkill", "-x", "sunshine"])
+        return True
+
+    def start_moonlight(self, address: str, app: str = "Desktop") -> bool:
+        # Try CLI first
+        cli = _which("moonlight") or _which("moonlight-qt")
+        if cli:
+            subprocess.Popen([cli, "stream", address, app],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        # Try opening .app with stream URL
+        app_path = "/Applications/Moonlight.app"
+        if Path(app_path).exists():
+            _run(["open", "-a", "Moonlight"])
+            return True
+        return False
+
+    def stop_moonlight(self) -> bool:
+        _run(["pkill", "-f", "Moonlight"])
+        return True
+
+    def install_service(self) -> bool:
+        exec_path = _which("orrbeamd")
+        if not exec_path:
+            import sys
+            exec_path = sys.executable
+            program_args = [exec_path, "-m", "orrbeam.daemon"]
+        else:
+            program_args = [exec_path]
+
+        plist = {
+            "Label": LAUNCHD_LABEL,
+            "ProgramArguments": program_args,
+            "RunAtLoad": True,
+            "KeepAlive": True,
+            "StandardOutPath": str(Path.home() / "Library" / "Logs" / "orrbeam.log"),
+            "StandardErrorPath": str(Path.home() / "Library" / "Logs" / "orrbeam.err"),
+            "EnvironmentVariables": {
+                "ORRBEAM_DAEMON": "1",
+            },
+        }
+
+        LAUNCHD_PLIST_DIR.mkdir(parents=True, exist_ok=True)
+        with open(LAUNCHD_PLIST, "wb") as f:
+            plistlib.dump(plist, f)
+
+        _run(["launchctl", "load", str(LAUNCHD_PLIST)])
+        return True
+
+    def uninstall_service(self) -> bool:
+        _run(["launchctl", "unload", str(LAUNCHD_PLIST)])
+        if LAUNCHD_PLIST.exists():
+            LAUNCHD_PLIST.unlink()
+        return True
+
+    def configure_firewall(self) -> bool:
+        # macOS uses pf, but Application Firewall is the common one
+        # Sunshine handles its own port setup; we just need to add to allowlist
+        sun = _which("sunshine") or "/opt/homebrew/bin/sunshine"
+        if os.path.isfile(sun):
+            _run(["sudo", "/usr/libexec/ApplicationFirewall/socketfilterfw",
+                   "--add", sun])
+            _run(["sudo", "/usr/libexec/ApplicationFirewall/socketfilterfw",
+                   "--unblockapp", sun])
+        print("If prompted, allow Sunshine through the macOS firewall in System Settings > Privacy & Security.")
+        return True
+
+    def display_server(self) -> str:
+        return "quartz"
+
+    def gpu_info(self) -> dict:
+        info: dict = {"gpus": [], "hw_encode": False, "encoder": "software"}
+        r = _run(["system_profiler", "SPDisplaysDataType", "-json"])
+        if r.returncode == 0:
+            import json
+            try:
+                data = json.loads(r.stdout)
+                displays = data.get("SPDisplaysDataType", [])
+                for gpu in displays:
+                    name = gpu.get("sppci_model", "Unknown GPU")
+                    info["gpus"].append({"name": name, "vendor": "apple"})
+                if displays:
+                    info["hw_encode"] = True
+                    info["encoder"] = "videotoolbox"
+            except (json.JSONDecodeError, KeyError):
+                pass
+        return info
