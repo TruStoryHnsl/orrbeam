@@ -149,12 +149,17 @@ class MacOSPlatform(Platform):
                 return str(binary)
         return None
 
-    def start_moonlight(self, address: str, app: str = "Desktop") -> bool:
+    def start_moonlight(self, address: str, app: str = "Desktop",
+                        windowed: bool = False, resolution: str = "") -> bool:
         cli = self.moonlight_cli_path()
         if not cli:
             return False
-        # Don't redirect stdout/stderr — Qt needs them for proper GUI initialization
-        subprocess.Popen([cli, "stream", address, app], start_new_session=True)
+        cmd = [cli, "stream", address, app]
+        if windowed:
+            cmd.extend(["--display-mode", "windowed"])
+        if resolution:
+            cmd.extend(["--resolution", resolution])
+        subprocess.Popen(cmd, start_new_session=True)
         return True
 
     def pair_moonlight(self, address: str, pin: str) -> bool:

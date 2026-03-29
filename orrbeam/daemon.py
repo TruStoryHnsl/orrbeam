@@ -109,13 +109,16 @@ class OrrbeamDaemon:
         data = await req.json()
         target = data.get("node") or data.get("address")
         app = data.get("app", "Desktop")
+        windowed = data.get("windowed", False)
+        resolution = data.get("resolution", "")
         if not target:
             return web.json_response({"error": "missing 'node' or 'address'"}, status=400)
         address = target
         node = self.registry.get(target)
         if node:
             address = node.address
-        ok = self.platform.start_moonlight(address, app)
+        ok = self.platform.start_moonlight(address, app,
+                                           windowed=windowed, resolution=resolution)
         return web.json_response({"connected": ok, "target": address, "app": app})
 
     async def _disconnect(self, _req: web.Request) -> web.Response:

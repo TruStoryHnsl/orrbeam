@@ -63,7 +63,8 @@ class Platform(ABC):
         """Stop Sunshine service."""
 
     @abstractmethod
-    def start_moonlight(self, address: str, app: str = "Desktop") -> bool:
+    def start_moonlight(self, address: str, app: str = "Desktop",
+                        windowed: bool = False, resolution: str = "") -> bool:
         """Launch Moonlight to connect to a remote host."""
 
     @abstractmethod

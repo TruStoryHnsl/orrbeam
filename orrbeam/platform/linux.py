@@ -198,14 +198,18 @@ class LinuxPlatform(Platform):
         _run(["pkill", "-x", "sunshine"])
         return True
 
-    def start_moonlight(self, address: str, app: str = "Desktop") -> bool:
+    def start_moonlight(self, address: str, app: str = "Desktop",
+                        windowed: bool = False, resolution: str = "") -> bool:
         path = _which("moonlight") or _which("moonlight-qt")
         if not path:
-            # Try flatpak
             r = _run(["flatpak", "run", "com.moonlight_stream.Moonlight", "stream", address, app])
             return r.returncode == 0
-        # Don't redirect stdout/stderr — Qt needs them for proper GUI initialization
-        subprocess.Popen([path, "stream", address, app], start_new_session=True)
+        cmd = [path, "stream", address, app]
+        if windowed:
+            cmd.extend(["--display-mode", "windowed"])
+        if resolution:
+            cmd.extend(["--resolution", resolution])
+        subprocess.Popen(cmd, start_new_session=True)
         return True
 
     def stop_moonlight(self) -> bool:

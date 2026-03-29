@@ -140,15 +140,20 @@ def list_nodes(ctx: click.Context) -> None:
 @main.command()
 @click.argument("target")
 @click.option("--app", default="Desktop", help="App to stream (default: Desktop)")
+@click.option("--windowed", "-w", is_flag=True, help="Open in a tileable window instead of fullscreen")
+@click.option("--resolution", "-r", default="", help="Stream resolution (e.g. 1920x1080, 2560x1440)")
 @click.pass_context
-def connect(ctx: click.Context, target: str, app: str) -> None:
+def connect(ctx: click.Context, target: str, app: str, windowed: bool, resolution: str) -> None:
     """Connect to a remote node via Moonlight."""
     config = ctx.obj["config"]
     if not _check_daemon(config):
         return
 
-    console.print(f"Connecting to [cyan]{target}[/cyan] ({app})...")
-    result = _api_post(config, "/api/connect", {"node": target, "app": app})
+    mode = "windowed" if windowed else "fullscreen"
+    console.print(f"Connecting to [cyan]{target}[/cyan] ({app}, {mode})...")
+    result = _api_post(config, "/api/connect", {
+        "node": target, "app": app, "windowed": windowed, "resolution": resolution,
+    })
     if result and result.get("connected"):
         console.print(f"[green]Connected to {result.get('target')}[/green]")
     else:
