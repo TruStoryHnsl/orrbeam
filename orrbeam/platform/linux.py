@@ -5,7 +5,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .base import Platform, ServiceStatus
+import re
+
+from .base import Platform, ServiceStatus, Monitor
 
 SYSTEMD_UNIT = """[Unit]
 Description=Orrbeam mesh daemon
@@ -292,3 +294,44 @@ class LinuxPlatform(Platform):
                 info["gpus"].append({"name": "VAAPI device", "vendor": "intel/amd"})
                 return info
         return info
+
+    def list_monitors(self) -> list[Monitor]:
+        r = _run(["xrandr", "--query"])
+        if r.returncode != 0:
+            return []
+        monitors = []
+        lines = r.stdout.split("\n")
+        i = 0
+        while i < len(lines):
+            # Match output lines like: DP-2 connected primary 1080x1920+0+0 left ...
+            m = re.match(
+                r'^(\S+)\s+connected\s*(primary)?\s*(\d+x\d+\+\d+\+\d+)?\s*(left|right|inverted)?\s*.*?(\d+mm\s*x\s*\d+mm)?',
+                lines[i]
+            )
+            if m:
+                name = m.group(1)
+                primary = m.group(2) is not None
+                geometry = m.group(3)  # e.g. "1080x1920+0+0"
+                rotation = m.group(4) or "normal"
+                active = geometry is not None
+                # Find the active mode (line with * marker)
+                width, height, refresh = 0, 0, 0.0
+                i += 1
+                while i < len(lines) and (lines[i].startswith("   ") or lines[i].startswith("\t")):
+                    mode_match = re.match(r'\s+(\d+)x(\d+)\s+([\d.]+)\*', lines[i])
+                    if mode_match:
+                        width = int(mode_match.group(1))
+                        height = int(mode_match.group(2))
+                        refresh = float(mode_match.group(3))
+                    i += 1
+                monitors.append(Monitor(
+                    name=name, description=name,
+                    width=width, height=height, refresh_rate=refresh,
+                    rotation=rotation, active=active, primary=primary,
+                ))
+            else:
+                i += 1
+        return monitors
+
+    def set_rotation(self, output: str, rotation: str) -> bool:
+        return _run(["xrandr", "--output", output, "--rotate", rotation]).returncode == 0

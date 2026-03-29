@@ -14,6 +14,26 @@ class ServiceStatus:
     path: str = ""
 
 
+@dataclass
+class Monitor:
+    name: str            # e.g. "DP-2", "HDMI-1"
+    description: str     # e.g. "AOC 27G2G4"
+    width: int           # native resolution width
+    height: int          # native resolution height
+    refresh_rate: float  # e.g. 143.88
+    rotation: str        # "normal", "left", "right", "inverted"
+    active: bool         # currently displaying
+    primary: bool        # is the primary display
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name, "description": self.description,
+            "width": self.width, "height": self.height,
+            "refresh_rate": self.refresh_rate, "rotation": self.rotation,
+            "active": self.active, "primary": self.primary,
+        }
+
+
 class Platform(ABC):
     """Abstract platform operations."""
 
@@ -76,3 +96,11 @@ class Platform(ABC):
     @abstractmethod
     def gpu_info(self) -> dict:
         """Return GPU info relevant to encoding capabilities."""
+
+    @abstractmethod
+    def list_monitors(self) -> list[Monitor]:
+        """Enumerate connected displays/monitors."""
+
+    @abstractmethod
+    def set_rotation(self, output: str, rotation: str) -> bool:
+        """Set display rotation. rotation: 'normal', 'left', 'right', 'inverted'."""

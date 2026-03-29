@@ -10,38 +10,9 @@ from rich.table import Table
 from .config import Config, DEFAULT_API_PORT
 from .identity import default_node_name, generate_identity, get_fingerprint
 from .platform import get_platform
+from .api_client import api_get as _api_get, api_post as _api_post
 
 console = Console()
-
-
-def _api_url(config: Config, path: str) -> str:
-    # CLI always talks to localhost, regardless of daemon bind address
-    return f"http://127.0.0.1:{config.api_port}{path}"
-
-
-def _api_get(config: Config, path: str) -> dict | None:
-    """Simple sync HTTP GET to the daemon API."""
-    import urllib.request
-    try:
-        url = _api_url(config, path)
-        with urllib.request.urlopen(url, timeout=3) as resp:
-            return json.loads(resp.read())
-    except Exception:
-        return None
-
-
-def _api_post(config: Config, path: str, data: dict | None = None) -> dict | None:
-    """Simple sync HTTP POST to the daemon API."""
-    import urllib.request
-    try:
-        url = _api_url(config, path)
-        body = json.dumps(data or {}).encode()
-        req = urllib.request.Request(url, data=body, method="POST",
-                                     headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            return json.loads(resp.read())
-    except Exception:
-        return None
 
 
 def _check_daemon(config: Config) -> bool:
@@ -365,6 +336,16 @@ def uninstall(ctx: click.Context) -> None:
         console.print("[green]Service removed[/green]")
     else:
         console.print("[red]Failed to remove service[/red]")
+
+
+@main.command()
+@click.pass_context
+def menu(ctx: click.Context) -> None:
+    """Launch the interactive TUI control panel."""
+    from .tui.app import OrrbeamApp
+    config = ctx.obj["config"]
+    app = OrrbeamApp(config=config)
+    app.run()
 
 
 if __name__ == "__main__":

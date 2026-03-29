@@ -6,7 +6,9 @@ import subprocess
 import plistlib
 from pathlib import Path
 
-from .base import Platform, ServiceStatus
+import json as _json
+
+from .base import Platform, ServiceStatus, Monitor
 
 LAUNCHD_PLIST_DIR = Path.home() / "Library" / "LaunchAgents"
 LAUNCHD_LABEL = "com.orrbeam.daemon"
@@ -223,9 +225,8 @@ class MacOSPlatform(Platform):
         info: dict = {"gpus": [], "hw_encode": False, "encoder": "software"}
         r = _run(["system_profiler", "SPDisplaysDataType", "-json"])
         if r.returncode == 0:
-            import json
             try:
-                data = json.loads(r.stdout)
+                data = _json.loads(r.stdout)
                 displays = data.get("SPDisplaysDataType", [])
                 for gpu in displays:
                     name = gpu.get("sppci_model", "Unknown GPU")
@@ -233,6 +234,40 @@ class MacOSPlatform(Platform):
                 if displays:
                     info["hw_encode"] = True
                     info["encoder"] = "videotoolbox"
-            except (json.JSONDecodeError, KeyError):
+            except (_json.JSONDecodeError, KeyError):
                 pass
         return info
+
+    def list_monitors(self) -> list[Monitor]:
+        r = _run(["system_profiler", "SPDisplaysDataType", "-json"])
+        if r.returncode != 0:
+            return []
+        monitors = []
+        try:
+            data = _json.loads(r.stdout)
+            for gpu in data.get("SPDisplaysDataType", []):
+                for disp in gpu.get("spdisplays_ndrvs", []):
+                    name = disp.get("_name", "Display")
+                    # Parse resolution like "3456 x 2234" or pixel string
+                    res = disp.get("_spdisplays_resolution", "")
+                    w, h = 0, 0
+                    if " x " in res:
+                        parts = res.split(" x ")
+                        try:
+                            w = int(parts[0].strip().split()[0])
+                            h = int(parts[1].strip().split()[0])
+                        except (ValueError, IndexError):
+                            pass
+                    is_main = disp.get("spdisplays_main") == "spdisplays_yes"
+                    monitors.append(Monitor(
+                        name=name, description=name,
+                        width=w, height=h, refresh_rate=0.0,
+                        rotation="normal", active=True, primary=is_main,
+                    ))
+        except (_json.JSONDecodeError, KeyError):
+            pass
+        return monitors
+
+    def set_rotation(self, output: str, rotation: str) -> bool:
+        # macOS display rotation requires displayplacer or system APIs
+        return False

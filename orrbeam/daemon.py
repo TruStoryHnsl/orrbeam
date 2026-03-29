@@ -16,6 +16,7 @@ from .identity import load_identity, get_fingerprint, default_node_name
 from .discovery import MDNSDiscovery, OrrtelliteDiscovery
 from .platform import get_platform
 from . import sunshine_api
+from . import sunshine_config
 
 log = logging.getLogger("orrbeam")
 
@@ -62,6 +63,8 @@ class OrrbeamDaemon:
         self._app.router.add_post("/api/pair/accept", self._pair_accept)
         self._app.router.add_post("/api/connect-back", self._connect_back)
         self._app.router.add_post("/api/loop", self._loop)
+        self._app.router.add_get("/api/monitors", self._list_monitors)
+        self._app.router.add_post("/api/display", self._set_display)
 
     # ── Status handlers ──
 
@@ -195,6 +198,36 @@ class OrrbeamDaemon:
             pin=pin, client_name=client_name,
         )
         return web.json_response({"accepted": accepted})
+
+    # ── Display management ──
+
+    async def _list_monitors(self, _req: web.Request) -> web.Response:
+        monitors = await asyncio.get_event_loop().run_in_executor(
+            None, self.platform.list_monitors)
+        current = sunshine_config.get_output_name()
+        return web.json_response({
+            "monitors": [m.to_dict() for m in monitors],
+            "current_output": current,
+        })
+
+    async def _set_display(self, req: web.Request) -> web.Response:
+        data = await req.json()
+        output_name = data.get("output_name")
+        rotation = data.get("rotation")
+
+        if output_name:
+            await asyncio.get_event_loop().run_in_executor(
+                None, sunshine_config.set_output_name, output_name)
+
+        if rotation:
+            target = output_name or sunshine_config.get_output_name() or ""
+            await asyncio.get_event_loop().run_in_executor(
+                None, self.platform.set_rotation, target, rotation)
+
+        ok = await asyncio.get_event_loop().run_in_executor(
+            None, sunshine_config.restart_sunshine)
+        log.info("Display config: output=%s rotation=%s restart=%s", output_name, rotation, ok)
+        return web.json_response({"applied": ok, "output_name": output_name, "rotation": rotation})
 
     # ── Bidirectional loop ──
 
