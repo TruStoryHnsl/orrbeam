@@ -134,20 +134,38 @@ class MacOSPlatform(Platform):
         _run(["pkill", "-f", "Sunshine"])
         return True
 
-    def start_moonlight(self, address: str, app: str = "Desktop") -> bool:
-        # Use open -a to launch the macOS app
-        if Path("/Applications/Moonlight.app").exists():
-            # Moonlight on macOS doesn't support CLI streaming args
-            # Open the app — user selects the host from Moonlight's own UI
-            _run(["open", "-a", "Moonlight"])
-            return True
-        # Try CLI
+    def moonlight_cli_path(self) -> str | None:
+        # CLI in PATH first
         cli = _which("moonlight") or _which("moonlight-qt")
         if cli:
-            subprocess.Popen([cli, "stream", address, app],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True
-        return False
+            return cli
+        # Extract CLI from .app bundle (supports stream, pair, list, quit)
+        for app_dir in ["/Applications/Moonlight.app",
+                        str(Path.home() / "Applications" / "Moonlight.app")]:
+            binary = Path(app_dir) / "Contents" / "MacOS" / "Moonlight"
+            if binary.exists():
+                return str(binary)
+        return None
+
+    def start_moonlight(self, address: str, app: str = "Desktop") -> bool:
+        cli = self.moonlight_cli_path()
+        if not cli:
+            return False
+        subprocess.Popen([cli, "stream", address, app],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+        return True
+
+    def pair_moonlight(self, address: str, pin: str) -> bool:
+        cli = self.moonlight_cli_path()
+        if not cli:
+            return False
+        # Launch pair as detached process — Qt needs to stay alive for the
+        # pairing handshake while the daemon submits the PIN to remote Sunshine
+        subprocess.Popen([cli, "pair", address, "--pin", pin],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+        return True
 
     def stop_moonlight(self) -> bool:
         _run(["pkill", "-f", "Moonlight"])

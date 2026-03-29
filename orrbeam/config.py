@@ -52,6 +52,8 @@ class Config:
     orrtellite_api_key: str = ""
     mdns_enabled: bool = True
     sunshine_path: str = ""
+    sunshine_username: str = ""
+    sunshine_password: str = ""
     moonlight_path: str = ""
     static_nodes: list[NodeEntry] = field(default_factory=list)
 
@@ -80,6 +82,8 @@ class Config:
             "orrtellite_api_key": self.orrtellite_api_key,
             "mdns_enabled": self.mdns_enabled,
             "sunshine_path": self.sunshine_path,
+            "sunshine_username": self.sunshine_username,
+            "sunshine_password": self.sunshine_password,
             "moonlight_path": self.moonlight_path,
             "static_nodes": [
                 {"name": n.name, "address": n.address, "port": n.port,

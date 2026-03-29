@@ -38,7 +38,7 @@ def _api_post(config: Config, path: str, data: dict | None = None) -> dict | Non
         body = json.dumps(data or {}).encode()
         req = urllib.request.Request(url, data=body, method="POST",
                                      headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=60) as resp:
             return json.loads(resp.read())
     except Exception:
         return None
@@ -194,6 +194,47 @@ def disconnect(ctx: click.Context) -> None:
         console.print("[green]Disconnected[/green]")
     else:
         console.print("[red]Failed to disconnect[/red]")
+
+
+@main.command()
+@click.argument("target")
+@click.pass_context
+def pair(ctx: click.Context, target: str) -> None:
+    """Pair with a remote node's Sunshine instance."""
+    config = ctx.obj["config"]
+    if not _check_daemon(config):
+        return
+
+    console.print(f"Pairing with [cyan]{target}[/cyan]...")
+    console.print("[dim]This may take up to 30 seconds...[/dim]")
+    result = _api_post(config, "/api/pair", {"node": target})
+    if result and result.get("paired"):
+        console.print(f"[green]Successfully paired with {target}[/green]")
+    else:
+        error = result.get("error", "pairing failed") if result else "daemon unreachable"
+        console.print(f"[red]Pairing failed: {error}[/red]")
+
+
+@main.command()
+@click.argument("target")
+@click.option("--app", default="Desktop", help="App to stream (default: Desktop)")
+@click.pass_context
+def loop(ctx: click.Context, target: str, app: str) -> None:
+    """Start bidirectional streaming loop with a remote node (infinite recursion)."""
+    config = ctx.obj["config"]
+    if not _check_daemon(config):
+        return
+
+    console.print(f"Starting bidirectional loop with [cyan]{target}[/cyan] ({app})...")
+    result = _api_post(config, "/api/loop", {"node": target, "app": app})
+    if result and result.get("looping"):
+        console.print(f"[green]Loop active![/green]")
+        console.print(f"  {config.node_name} -> {result.get('target')}: streaming {app}")
+        console.print(f"  {result.get('target')} -> {result.get('local')}: streaming {app}")
+        console.print("Run [bold]orrbeam disconnect[/bold] to stop.")
+    else:
+        error = result.get("error", "loop failed") if result else "daemon unreachable"
+        console.print(f"[red]Loop failed: {error}[/red]")
 
 
 @main.command()

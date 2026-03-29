@@ -210,6 +210,16 @@ class LinuxPlatform(Platform):
         _run(["pkill", "-f", "moonlight"])
         return True
 
+    def moonlight_cli_path(self) -> str | None:
+        return _which("moonlight") or _which("moonlight-qt") or None
+
+    def pair_moonlight(self, address: str, pin: str) -> bool:
+        path = self.moonlight_cli_path()
+        if not path:
+            return False
+        r = _run([path, "pair", address, "--pin", pin], timeout=30)
+        return r.returncode == 0
+
     def install_service(self) -> bool:
         exec_path = _which("orrbeamd")
         if not exec_path:

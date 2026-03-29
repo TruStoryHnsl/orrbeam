@@ -50,6 +50,14 @@ class Platform(ABC):
         """Stop Moonlight client."""
 
     @abstractmethod
+    def moonlight_cli_path(self) -> str | None:
+        """Return path to moonlight CLI binary that supports 'stream' and 'pair' subcommands."""
+
+    @abstractmethod
+    def pair_moonlight(self, address: str, pin: str) -> bool:
+        """Initiate Moonlight pairing with a predetermined PIN. Returns True if pairing started."""
+
+    @abstractmethod
     def install_service(self) -> bool:
         """Install orrbeamd as a system service."""
 
