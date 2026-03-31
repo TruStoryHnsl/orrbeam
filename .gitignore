@@ -1,11 +1,31 @@
+# Rust
+target/
+Cargo.lock
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Python (v1 archive)
 __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
-dist/
-build/
 .venv/
 *.egg
 .mypy_cache/
 .ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Orrbeam
 .orrtemp
+
+# Generated icons (keep source, ignore generated)
+src-tauri/icons/icon.png
