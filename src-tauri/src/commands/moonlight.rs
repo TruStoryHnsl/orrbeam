@@ -39,6 +39,6 @@ pub async fn start_moonlight(
 }
 
 #[tauri::command]
-pub fn stop_moonlight(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn stop_moonlight(state: State<'_, AppState>) -> Result<(), String> {
     state.platform.stop_moonlight().map_err(|e| e.to_string())
 }

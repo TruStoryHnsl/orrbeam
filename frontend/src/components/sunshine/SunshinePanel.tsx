@@ -1,10 +1,35 @@
+import { useState } from "react";
 import { useSunshineStore } from "@/stores/sunshine";
+import type { SunshineSettings } from "@/stores/sunshine";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { Button } from "@/components/ui/Button";
+import { PairAcceptDialog } from "./PairAcceptDialog";
+
+const CODEC_OPTIONS = ["h264", "h265", "av1"];
+const FPS_OPTIONS = [30, 60, 90, 120];
+const BITRATE_PRESETS = [
+  { label: "5 Mbps", value: 5000 },
+  { label: "10 Mbps", value: 10000 },
+  { label: "20 Mbps", value: 20000 },
+  { label: "40 Mbps", value: 40000 },
+  { label: "80 Mbps", value: 80000 },
+];
 
 export function SunshinePanel() {
-  const { status, gpu, monitors, loading, error, start, stop } =
-    useSunshineStore();
+  const {
+    status,
+    gpu,
+    monitors,
+    settings,
+    loading,
+    error,
+    start,
+    stop,
+    setMonitor,
+    updateSettings,
+  } = useSunshineStore();
+
+  const [pairOpen, setPairOpen] = useState(false);
 
   const isRunning = status?.status === "running";
   const isInstalled = status?.status !== "not_installed";
@@ -23,71 +48,94 @@ export function SunshinePanel() {
         {status && <StatusDot status={status.status} />}
       </div>
 
-      {/* Status */}
-      <div className="space-y-3 mb-4">
+      {/* Service info */}
+      <Section title="Service">
         <InfoRow label="Status" value={status?.status ?? "checking..."} />
-        {status?.version && (
-          <InfoRow label="Version" value={status.version} />
-        )}
-        {gpu && (
-          <>
-            <InfoRow label="Encoder" value={gpu.encoder} />
-            <InfoRow label="GPU" value={gpu.name} />
-            {gpu.driver && <InfoRow label="Driver" value={gpu.driver} />}
-          </>
-        )}
-      </div>
+        {status?.version && <InfoRow label="Version" value={status.version} />}
+      </Section>
 
-      {/* Monitors */}
+      {/* GPU & Encoder */}
+      {gpu && (
+        <Section title="Encoder">
+          <InfoRow label="GPU" value={gpu.name} />
+          <InfoRow label="Encoder" value={gpu.encoder} />
+          {gpu.driver && <InfoRow label="Driver" value={gpu.driver} />}
+        </Section>
+      )}
+
+      {/* Monitor selector */}
       {monitors.length > 0 && (
-        <div className="mb-4">
-          <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-2">
-            Monitors
-          </h3>
+        <Section title="Monitor">
           <div className="space-y-1">
-            {monitors.map((m) => (
-              <div
-                key={m.name}
-                className="flex items-center justify-between text-xs bg-surface-2 rounded px-2 py-1.5"
-              >
-                <span className="text-neutral-200">
-                  {m.name}
-                  {m.primary && (
-                    <span className="text-sunshine ml-1">*</span>
-                  )}
-                </span>
-                <span className="text-neutral-500">
-                  {m.resolution}
-                  {m.refresh_rate && ` @ ${m.refresh_rate}Hz`}
-                </span>
-              </div>
-            ))}
+            {monitors.map((m) => {
+              const isSelected = settings?.output_name === m.name;
+              return (
+                <button
+                  key={m.name}
+                  onClick={() => setMonitor(m.name)}
+                  className={`w-full flex items-center justify-between text-xs rounded px-2.5 py-2 transition-colors ${
+                    isSelected
+                      ? "bg-sunshine/15 border border-sunshine/30 text-sunshine"
+                      : "bg-surface-2 border border-transparent text-neutral-300 hover:bg-surface-3"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    {isSelected && <span className="text-sunshine">●</span>}
+                    {m.name}
+                    {m.primary && (
+                      <span className="text-[10px] text-neutral-500">
+                        primary
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-neutral-500">
+                    {m.resolution}
+                    {m.refresh_rate && ` @ ${m.refresh_rate}Hz`}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        </div>
+        </Section>
+      )}
+
+      {/* Stream settings */}
+      {settings && (
+        <StreamSettings settings={settings} onSave={updateSettings} />
       )}
 
       {/* Error */}
       {error && (
-        <div className="text-xs text-red-400 bg-red-500/10 rounded px-2 py-1.5 mb-4">
+        <div className="text-xs text-red-400 bg-red-500/10 rounded px-2 py-1.5 mb-3">
           {error}
         </div>
       )}
 
       {/* Actions */}
-      <div className="mt-auto pt-4">
+      <div className="mt-auto pt-4 space-y-2">
         {!isInstalled ? (
           <p className="text-xs text-neutral-500">
             Sunshine is not installed.
           </p>
         ) : isRunning ? (
-          <Button
-            variant="danger"
-            onClick={stop}
-            disabled={loading}
-            className="w-full"
-          >
-            {loading ? "Stopping..." : "Stop Hosting"}
-          </Button>
+          <>
+            <Button
+              variant="danger"
+              onClick={stop}
+              disabled={loading}
+              className="w-full"
+            >
+              {loading ? "Stopping..." : "Stop Hosting"}
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setPairOpen(true)}
+              className="w-full"
+              size="sm"
+            >
+              Accept Pairing
+            </Button>
+          </>
         ) : (
           <Button
             variant="sunshine"
@@ -99,6 +147,123 @@ export function SunshinePanel() {
           </Button>
         )}
       </div>
+
+      <PairAcceptDialog open={pairOpen} onClose={() => setPairOpen(false)} />
+    </div>
+  );
+}
+
+function StreamSettings({
+  settings,
+  onSave,
+}: {
+  settings: SunshineSettings;
+  onSave: (s: SunshineSettings) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(settings);
+  const [dirty, setDirty] = useState(false);
+
+  const update = (patch: Partial<SunshineSettings>) => {
+    setDraft((d) => ({ ...d, ...patch }));
+    setDirty(true);
+  };
+
+  const save = async () => {
+    await onSave(draft);
+    setDirty(false);
+  };
+
+  return (
+    <Section
+      title="Stream"
+      action={
+        dirty ? (
+          <button
+            onClick={save}
+            className="text-[10px] text-sunshine hover:text-sunshine-bright transition-colors"
+          >
+            Apply
+          </button>
+        ) : null
+      }
+    >
+      {/* Codec */}
+      <div className="flex items-center justify-between text-xs mb-2">
+        <span className="text-neutral-500">Codec</span>
+        <div className="flex gap-1">
+          {CODEC_OPTIONS.map((c) => (
+            <button
+              key={c}
+              onClick={() => update({ codec: c })}
+              className={`px-2 py-0.5 rounded text-[11px] transition-colors ${
+                draft.codec === c
+                  ? "bg-sunshine/20 text-sunshine border border-sunshine/30"
+                  : "bg-surface-3 text-neutral-400 hover:text-neutral-200"
+              }`}
+            >
+              {c.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* FPS */}
+      <div className="flex items-center justify-between text-xs mb-2">
+        <span className="text-neutral-500">FPS</span>
+        <div className="flex gap-1">
+          {FPS_OPTIONS.map((f) => (
+            <button
+              key={f}
+              onClick={() => update({ fps: f })}
+              className={`px-2 py-0.5 rounded text-[11px] transition-colors ${
+                draft.fps === f
+                  ? "bg-sunshine/20 text-sunshine border border-sunshine/30"
+                  : "bg-surface-3 text-neutral-400 hover:text-neutral-200"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Bitrate */}
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-neutral-500">Bitrate</span>
+        <select
+          value={draft.bitrate ?? 20000}
+          onChange={(e) => update({ bitrate: Number(e.target.value) })}
+          className="bg-surface-3 text-neutral-200 text-[11px] rounded px-2 py-0.5 border-0 outline-none"
+        >
+          {BITRATE_PRESETS.map((b) => (
+            <option key={b.value} value={b.value}>
+              {b.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </Section>
+  );
+}
+
+function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider">
+          {title}
+        </h3>
+        {action}
+      </div>
+      <div className="space-y-1.5">{children}</div>
     </div>
   );
 }

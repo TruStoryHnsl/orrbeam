@@ -21,16 +21,29 @@ export interface MonitorInfo {
   primary: boolean;
 }
 
+export interface SunshineSettings {
+  output_name: string | null;
+  fps: number | null;
+  bitrate: number | null;
+  encoder: string | null;
+  codec: string | null;
+  channels: number | null;
+}
+
 interface SunshineState {
   status: ServiceInfo | null;
   gpu: GpuInfo | null;
   monitors: MonitorInfo[];
+  settings: SunshineSettings | null;
   loading: boolean;
   error: string | null;
 
   fetchStatus: () => Promise<void>;
   fetchGpu: () => Promise<void>;
   fetchMonitors: () => Promise<void>;
+  fetchSettings: () => Promise<void>;
+  setMonitor: (name: string) => Promise<void>;
+  updateSettings: (settings: SunshineSettings) => Promise<void>;
   start: () => Promise<void>;
   stop: () => Promise<void>;
 }
@@ -39,6 +52,7 @@ export const useSunshineStore = create<SunshineState>((set) => ({
   status: null,
   gpu: null,
   monitors: [],
+  settings: null,
   loading: false,
   error: null,
 
@@ -69,11 +83,40 @@ export const useSunshineStore = create<SunshineState>((set) => ({
     }
   },
 
+  fetchSettings: async () => {
+    try {
+      const settings = (await invoke("get_sunshine_settings")) as SunshineSettings;
+      set({ settings, error: null });
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  setMonitor: async (name: string) => {
+    try {
+      await invoke("set_sunshine_monitor", { monitor: name });
+      set((s) => ({
+        settings: s.settings ? { ...s.settings, output_name: name } : null,
+        error: null,
+      }));
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  updateSettings: async (settings: SunshineSettings) => {
+    try {
+      await invoke("set_sunshine_settings", { settings });
+      set({ settings, error: null });
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
   start: async () => {
     set({ loading: true });
     try {
       await invoke("start_sunshine");
-      // Re-fetch status after a brief delay for process startup
       setTimeout(async () => {
         const status = (await invoke("get_sunshine_status")) as ServiceInfo;
         set({ status, loading: false, error: null });

@@ -26,12 +26,20 @@ export const usePlatformStore = create<PlatformState>((set) => ({
   identity: null,
 
   fetchInfo: async () => {
-    const info = (await invoke("get_platform_info")) as PlatformInfo;
-    set({ info });
+    try {
+      const info = (await invoke("get_platform_info")) as PlatformInfo;
+      set({ info });
+    } catch (e) {
+      console.error("[platform] fetchInfo failed:", e);
+    }
   },
 
   fetchIdentity: async () => {
-    const identity = (await invoke("get_identity")) as PublicIdentity;
-    set({ identity });
+    try {
+      const identity = (await invoke("get_identity")) as PublicIdentity;
+      set({ identity });
+    } catch (e) {
+      console.error("[platform] fetchIdentity failed:", e);
+    }
   },
 }));

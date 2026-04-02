@@ -1,19 +1,37 @@
 /// Tauri IPC wrapper with browser-mode mocks for dev iteration.
+///
+/// Detection: Tauri v2 sets `window.__TAURI_INTERNALS__` before any JS runs
+/// (injected via the webview preload script). We also check `window.isTauri`
+/// as the official Tauri v2 detection signal. We check both to be safe.
 
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+function detectTauri(): boolean {
+  if (typeof window === "undefined") return false;
+  // Official Tauri v2 detection (set by the runtime)
+  if ("isTauri" in window) return true;
+  // Fallback: check for the internal IPC bridge
+  if ("__TAURI_INTERNALS__" in window) return true;
+  return false;
+}
+
+const IS_TAURI = detectTauri();
+
+// Log detection result so we can debug in the webview console
+console.log(`[orrbeam] Tauri detected: ${IS_TAURI}`);
 
 type InvokeFn = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
 
-// Lazy-load the Tauri invoke function on first call
+// Lazy-load the real Tauri invoke — only imported when actually in Tauri
 let cachedInvoke: InvokeFn | null = null;
 
 async function getTauriInvoke(): Promise<InvokeFn> {
   if (!cachedInvoke) {
-    const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
-    cachedInvoke = tauriInvoke as InvokeFn;
+    const mod = await import("@tauri-apps/api/core");
+    cachedInvoke = mod.invoke as InvokeFn;
   }
   return cachedInvoke;
 }
+
+// ── Mocks (only used when running in a plain browser, not in Tauri) ──
 
 const mocks: Record<string, unknown> = {
   get_platform_info: {
@@ -43,6 +61,18 @@ const mocks: Record<string, unknown> = {
     version: "6.0.1",
     path: "/usr/bin/moonlight-qt",
   },
+  get_sunshine_settings: {
+    output_name: "DP-1",
+    fps: 60,
+    bitrate: 20000,
+    encoder: "nvenc",
+    codec: "h265",
+    channels: 2,
+  },
+  set_sunshine_settings: null,
+  set_sunshine_monitor: null,
+  pair_initiate: { pin: "4217", target: "192.168.1.100", started: true },
+  pair_accept: true,
   get_nodes: [
     {
       name: "orrpheus",
@@ -78,6 +108,8 @@ const mocks: Record<string, unknown> = {
     orrtellite_url: "https://hs.orrtellite.orrgate.com",
     orrtellite_api_key: "",
     sunshine_path: null,
+    sunshine_username: "sunshine",
+    sunshine_password: "sunshine",
     moonlight_path: null,
     static_nodes: [],
   },
@@ -89,14 +121,19 @@ const mocks: Record<string, unknown> = {
 
 function mockInvoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
   console.log(`[mock] invoke: ${cmd}`, args);
-  if (cmd in mocks) return Promise.resolve(mocks[cmd]);
+  if (cmd in mocks) return Promise.resolve(structuredClone(mocks[cmd]));
   return Promise.reject(new Error(`[mock] unknown command: ${cmd}`));
 }
 
 export async function invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
-  if (isTauri) {
-    const fn = await getTauriInvoke();
-    return fn(cmd, args);
+  if (IS_TAURI) {
+    try {
+      const fn = await getTauriInvoke();
+      return await fn(cmd, args);
+    } catch (e) {
+      console.error(`[tauri] invoke ${cmd} failed:`, e);
+      throw e;
+    }
   }
   return mockInvoke(cmd, args);
 }

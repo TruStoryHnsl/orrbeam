@@ -59,6 +59,14 @@ pub trait Platform: Send + Sync {
 
     /// Detect GPU and encoder capabilities.
     fn gpu_info(&self) -> Result<GpuInfo, PlatformError>;
+
+    /// Initiate Moonlight pairing with a remote Sunshine host using a predetermined PIN.
+    fn pair_moonlight(
+        &self,
+        config: &Config,
+        address: &str,
+        pin: &str,
+    ) -> Result<(), PlatformError>;
 }
 
 /// Get the platform implementation for the current OS.

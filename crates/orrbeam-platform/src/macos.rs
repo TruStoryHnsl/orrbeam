@@ -172,6 +172,32 @@ impl Platform for MacOsPlatform {
         Ok(monitors)
     }
 
+    fn pair_moonlight(
+        &self,
+        config: &Config,
+        address: &str,
+        pin: &str,
+    ) -> Result<(), PlatformError> {
+        let path = config
+            .moonlight_path
+            .as_deref()
+            .unwrap_or("/Applications/Moonlight.app/Contents/MacOS/Moonlight");
+
+        Command::new(path)
+            .args(["pair", address, "--pin", pin])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    PlatformError::NotFound(path.to_string())
+                } else {
+                    PlatformError::Io(e)
+                }
+            })?;
+        Ok(())
+    }
+
     fn gpu_info(&self) -> Result<GpuInfo, PlatformError> {
         let output = Self::run(
             "system_profiler",

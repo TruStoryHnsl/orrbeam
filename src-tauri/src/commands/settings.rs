@@ -21,6 +21,6 @@ pub async fn save_config(
 }
 
 #[tauri::command]
-pub fn get_identity(state: State<'_, AppState>) -> PublicIdentity {
-    state.identity.public_identity()
+pub async fn get_identity(state: State<'_, AppState>) -> Result<PublicIdentity, String> {
+    Ok(state.identity.public_identity())
 }

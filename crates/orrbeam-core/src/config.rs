@@ -28,6 +28,8 @@ pub struct Config {
     pub orrtellite_url: String,
     pub orrtellite_api_key: String,
     pub sunshine_path: Option<String>,
+    pub sunshine_username: String,
+    pub sunshine_password: String,
     pub moonlight_path: Option<String>,
     pub static_nodes: Vec<StaticNode>,
 }
@@ -42,6 +44,8 @@ impl Default for Config {
             orrtellite_url: String::new(),
             orrtellite_api_key: String::new(),
             sunshine_path: None,
+            sunshine_username: "sunshine".to_string(),
+            sunshine_password: "sunshine".to_string(),
             moonlight_path: None,
             static_nodes: Vec::new(),
         }

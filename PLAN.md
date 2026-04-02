@@ -154,15 +154,15 @@ Nodes find each other via (in priority order):
 - [x] Archived to v1/
 
 ### v2 (current — Tauri desktop GUI)
-1. [ ] **Scaffold Tauri v2 workspace** — Cargo workspace + React frontend + crates
-2. [ ] **Platform crate** — Detect OS, GPU, Sunshine/Moonlight install status, process management
-3. [ ] **Core crate** — Config (YAML), identity (Ed25519), node types
-4. [ ] **Net crate** — mDNS discovery + orrtellite polling
-5. [ ] **Two-panel layout** — Side-by-side Sunshine + Moonlight panels
-6. [ ] **Sunshine management** — Start/stop, monitor selection, encoder config, connected clients
-7. [ ] **Moonlight management** — Node browser, connect/disconnect, stream settings
-8. [ ] **Mesh visualization** — Bottom bar showing all nodes and connections
-9. [ ] **Pairing workflow** — GUI-driven pairing between nodes
+1. [x] **Scaffold Tauri v2 workspace** — Cargo workspace + React frontend + crates
+2. [x] **Platform crate** — Detect OS, GPU, Sunshine/Moonlight install status, process management
+3. [x] **Core crate** — Config (YAML), identity (Ed25519), node types, sunshine.conf read/write
+4. [x] **Net crate** — mDNS discovery + orrtellite polling
+5. [x] **Two-panel layout** — Side-by-side Sunshine + Moonlight panels
+6. [x] **Sunshine management** — Start/stop, monitor selector, codec/fps/bitrate config
+7. [x] **Moonlight management** — Node browser, connect/disconnect, resolution/mode/app settings
+8. [x] **Mesh visualization** — Bottom bar showing all nodes and connections
+9. [x] **Pairing workflow** — Initiate (Moonlight PIN + subprocess) + Accept (Sunshine API) dialogs
 10. [ ] **System tray** — Minimize to tray, quick connect shortcuts
 11. [ ] **Mobile builds** — iOS + Android client-only mode
 12. [ ] **Windows support** — Build + test on Windows
@@ -179,6 +179,8 @@ Nodes find each other via (in priority order):
 | Headless (orrgate) | Not supported | Orrgate is a services VM — SSH suffices, no graphical desktop needed |
 
 ## Recent Changes
-- 2026-03-30: **Resolved all open questions.** Tauri v2 + Rust + React. No daemon, no CLI. Side-by-side layout. Full mesh + personal status. Begin v2 scaffold.
+- 2026-04-01: **Item 9 done + interactivity bugfix.** Pairing workflow (initiate + accept dialogs). Fixed non-interactive UI: all subprocess-calling Tauri commands converted to async (were blocking main/webview thread), improved IPC detection, added WebKitGTK compositing workaround for Wayland, added error handling to all stores.
+- 2026-04-01: Items 1-8 complete. Full two-panel UI with interactive Sunshine controls (monitor selector, codec/fps/bitrate), Moonlight controls (resolution picker, windowed/fullscreen, app selector, node selection), and mesh bar. Sunshine config read/write via sunshine.conf.
+- 2026-03-30: Resolved all open questions. Tauri v2 + Rust + React. No daemon, no CLI. Side-by-side layout. Full mesh + personal status. v2 scaffold built.
 - 2026-04-13: Architecture pivot — user requested standalone desktop GUI replacing CLI/daemon/TUI.
 - 2026-03-26: Initial plan created from user feedback (now v1).

@@ -15,6 +15,7 @@ function App() {
   const fetchSunshineStatus = useSunshineStore((s) => s.fetchStatus);
   const fetchGpu = useSunshineStore((s) => s.fetchGpu);
   const fetchMonitors = useSunshineStore((s) => s.fetchMonitors);
+  const fetchSunshineSettings = useSunshineStore((s) => s.fetchSettings);
   const fetchMoonlightStatus = useMoonlightStore((s) => s.fetchStatus);
   const fetchNodes = useMoonlightStore((s) => s.fetchNodes);
 
@@ -25,6 +26,7 @@ function App() {
     fetchSunshineStatus();
     fetchGpu();
     fetchMonitors();
+    fetchSunshineSettings();
     fetchMoonlightStatus();
     fetchNodes();
   }, []);
