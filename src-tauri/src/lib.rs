@@ -1,9 +1,11 @@
 mod commands;
+mod tray;
 
 use orrbeam_core::{Config, Identity, NodeRegistry};
 use orrbeam_net::DiscoveryManager;
 use orrbeam_platform::get_platform;
 use std::sync::Arc;
+use tauri::Manager;
 use tokio::sync::RwLock;
 
 /// Shared application state accessible from all Tauri commands.
@@ -75,6 +77,18 @@ pub fn run() {
             commands::settings::save_config,
             commands::settings::get_identity,
         ])
+        .setup(|app| {
+            tray::create_tray(app)?;
+            tray::spawn_tray_updater(app.handle().clone());
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+                tray::refresh_tray(window.app_handle());
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running orrbeam");
 }
