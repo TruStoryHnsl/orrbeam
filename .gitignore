@@ -27,5 +27,8 @@ Thumbs.db
 # Orrbeam
 .orrtemp
 
+# Orrchestrator workflow state (local tooling)
+.orrch/
+
 # Generated icons (keep source, ignore generated)
 src-tauri/icons/icon.png
