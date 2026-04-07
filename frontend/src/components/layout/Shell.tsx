@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { usePlatformStore } from "@/stores/platform";
+import orrbeamLogo from "@/assets/orrbeam-logo.png";
 
 const TRAY_NOTICE_KEY = "orrbeam-tray-notice-shown";
 
@@ -42,6 +43,11 @@ export function Shell({ children }: { children: ReactNode }) {
       {/* Title bar */}
       <header className="flex items-center justify-between px-4 py-2 bg-surface-1 border-b border-surface-3">
         <div className="flex items-center gap-3">
+          <img
+            src={orrbeamLogo}
+            alt=""
+            className="h-7 w-auto object-contain"
+          />
           <h1 className="text-lg font-semibold tracking-tight">
             <span className="text-sunshine">Orr</span>
             <span className="text-white">beam</span>
