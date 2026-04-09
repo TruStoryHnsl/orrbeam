@@ -1,3 +1,4 @@
+mod common;
 mod detect;
 
 #[cfg(target_os = "linux")]

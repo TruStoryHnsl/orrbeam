@@ -1,12 +1,22 @@
+use crate::common::{resolve_binary, stop_tracked, store_child, ChildSlot};
 use crate::{GpuInfo, MonitorInfo, Platform, PlatformError, PlatformInfo, ServiceInfo, ServiceStatus};
 use orrbeam_core::Config;
 use std::process::Command;
 
-pub struct LinuxPlatform;
+const SUNSHINE_CANDIDATES: &[&str] = &["sunshine"];
+const MOONLIGHT_CANDIDATES: &[&str] = &["moonlight-qt", "moonlight"];
+
+pub struct LinuxPlatform {
+    sunshine_child: ChildSlot,
+    moonlight_child: ChildSlot,
+}
 
 impl LinuxPlatform {
     pub fn new() -> Self {
-        Self
+        Self {
+            sunshine_child: ChildSlot::default(),
+            moonlight_child: ChildSlot::default(),
+        }
     }
 
     fn run(cmd: &str, args: &[&str]) -> Result<String, PlatformError> {
@@ -54,16 +64,11 @@ impl Platform for LinuxPlatform {
     }
 
     fn sunshine_status(&self, config: &Config) -> Result<ServiceInfo, PlatformError> {
-        let path = config
-            .sunshine_path
-            .clone()
-            .or_else(|| which::which("sunshine").ok().map(|p| p.to_string_lossy().to_string()));
+        let path = resolve_binary(config.sunshine_path.as_deref(), SUNSHINE_CANDIDATES).ok();
 
         let running = Self::run("pgrep", &["-x", "sunshine"]).is_ok();
 
-        let version = path.as_ref().and_then(|p| {
-            Self::run(p, &["--version"]).ok()
-        });
+        let version = path.as_ref().and_then(|p| Self::run(p, &["--version"]).ok());
 
         Ok(ServiceInfo {
             name: "Sunshine".to_string(),
@@ -80,12 +85,7 @@ impl Platform for LinuxPlatform {
     }
 
     fn moonlight_status(&self, config: &Config) -> Result<ServiceInfo, PlatformError> {
-        let path = config.moonlight_path.clone().or_else(|| {
-            which::which("moonlight")
-                .or_else(|_| which::which("moonlight-qt"))
-                .ok()
-                .map(|p| p.to_string_lossy().to_string())
-        });
+        let path = resolve_binary(config.moonlight_path.as_deref(), MOONLIGHT_CANDIDATES).ok();
 
         let running = Self::run("pgrep", &["-x", "moonlight-qt"])
             .or_else(|_| Self::run("pgrep", &["-x", "moonlight"]))
@@ -114,25 +114,27 @@ impl Platform for LinuxPlatform {
     }
 
     fn start_sunshine(&self, config: &Config) -> Result<(), PlatformError> {
-        let path = config
-            .sunshine_path
-            .as_deref()
-            .unwrap_or("sunshine");
+        let path = resolve_binary(config.sunshine_path.as_deref(), SUNSHINE_CANDIDATES)?;
 
-        Command::new(path)
-            .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    PlatformError::NotFound(path.to_string())
-                } else {
-                    PlatformError::Io(e)
-                }
-            })?;
+        let child = Command::new(&path).spawn().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                PlatformError::NotFound(path.clone())
+            } else {
+                PlatformError::Io(e)
+            }
+        })?;
+        store_child(&self.sunshine_child, child);
         Ok(())
     }
 
     fn stop_sunshine(&self) -> Result<(), PlatformError> {
-        Self::run("pkill", &["-x", "sunshine"])?;
+        // Primary: kill the handle we tracked at spawn time.
+        if stop_tracked(&self.sunshine_child)? {
+            return Ok(());
+        }
+        // Fallback: process was started outside orrbeam (e.g. systemd).
+        // pkill returns nonzero if no match — treat that as "already stopped".
+        let _ = Self::run("pkill", &["-x", "sunshine"]);
         Ok(())
     }
 
@@ -144,12 +146,9 @@ impl Platform for LinuxPlatform {
         windowed: bool,
         resolution: Option<&str>,
     ) -> Result<(), PlatformError> {
-        let path = config
-            .moonlight_path
-            .as_deref()
-            .unwrap_or("moonlight-qt");
+        let path = resolve_binary(config.moonlight_path.as_deref(), MOONLIGHT_CANDIDATES)?;
 
-        let mut cmd = Command::new(path);
+        let mut cmd = Command::new(&path);
         cmd.arg("stream").arg(address).arg(app);
 
         if windowed {
@@ -159,17 +158,21 @@ impl Platform for LinuxPlatform {
             cmd.arg("--resolution").arg(res);
         }
 
-        cmd.spawn().map_err(|e| {
+        let child = cmd.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                PlatformError::NotFound(path.to_string())
+                PlatformError::NotFound(path.clone())
             } else {
                 PlatformError::Io(e)
             }
         })?;
+        store_child(&self.moonlight_child, child);
         Ok(())
     }
 
     fn stop_moonlight(&self) -> Result<(), PlatformError> {
+        if stop_tracked(&self.moonlight_child)? {
+            return Ok(());
+        }
         let _ = Self::run("pkill", &["-x", "moonlight-qt"]);
         let _ = Self::run("pkill", &["-x", "moonlight"]);
         Ok(())
@@ -207,19 +210,16 @@ impl Platform for LinuxPlatform {
         address: &str,
         pin: &str,
     ) -> Result<(), PlatformError> {
-        let path = config
-            .moonlight_path
-            .as_deref()
-            .unwrap_or("moonlight-qt");
+        let path = resolve_binary(config.moonlight_path.as_deref(), MOONLIGHT_CANDIDATES)?;
 
-        Command::new(path)
+        Command::new(&path)
             .args(["pair", address, "--pin", pin])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
-                    PlatformError::NotFound(path.to_string())
+                    PlatformError::NotFound(path.clone())
                 } else {
                     PlatformError::Io(e)
                 }

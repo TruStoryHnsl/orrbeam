@@ -1,12 +1,22 @@
+use crate::common::{resolve_binary, stop_tracked, store_child, ChildSlot};
 use crate::{GpuInfo, MonitorInfo, Platform, PlatformError, PlatformInfo, ServiceInfo, ServiceStatus};
 use orrbeam_core::Config;
 use std::process::Command;
 
-pub struct WindowsPlatform;
+const SUNSHINE_CANDIDATES: &[&str] = &["sunshine", "sunshine.exe"];
+const MOONLIGHT_CANDIDATES: &[&str] = &["Moonlight", "Moonlight.exe", "moonlight-qt"];
+
+pub struct WindowsPlatform {
+    sunshine_child: ChildSlot,
+    moonlight_child: ChildSlot,
+}
 
 impl WindowsPlatform {
     pub fn new() -> Self {
-        Self
+        Self {
+            sunshine_child: ChildSlot::default(),
+            moonlight_child: ChildSlot::default(),
+        }
     }
 
     fn run(cmd: &str, args: &[&str]) -> Result<String, PlatformError> {
@@ -43,10 +53,7 @@ impl Platform for WindowsPlatform {
     }
 
     fn sunshine_status(&self, config: &Config) -> Result<ServiceInfo, PlatformError> {
-        let path = config
-            .sunshine_path
-            .clone()
-            .or_else(|| which::which("sunshine").ok().map(|p| p.to_string_lossy().to_string()));
+        let path = resolve_binary(config.sunshine_path.as_deref(), SUNSHINE_CANDIDATES).ok();
 
         let running = Self::run("tasklist", &["/FI", "IMAGENAME eq sunshine.exe"])
             .map(|out| out.contains("sunshine.exe"))
@@ -67,11 +74,7 @@ impl Platform for WindowsPlatform {
     }
 
     fn moonlight_status(&self, config: &Config) -> Result<ServiceInfo, PlatformError> {
-        let path = config.moonlight_path.clone().or_else(|| {
-            which::which("Moonlight")
-                .ok()
-                .map(|p| p.to_string_lossy().to_string())
-        });
+        let path = resolve_binary(config.moonlight_path.as_deref(), MOONLIGHT_CANDIDATES).ok();
 
         let running = Self::run("tasklist", &["/FI", "IMAGENAME eq Moonlight.exe"])
             .map(|out| out.contains("Moonlight.exe"))
@@ -92,23 +95,24 @@ impl Platform for WindowsPlatform {
     }
 
     fn start_sunshine(&self, config: &Config) -> Result<(), PlatformError> {
-        let path = config
-            .sunshine_path
-            .as_deref()
-            .unwrap_or("sunshine");
+        let path = resolve_binary(config.sunshine_path.as_deref(), SUNSHINE_CANDIDATES)?;
 
-        Command::new(path).spawn().map_err(|e| {
+        let child = Command::new(&path).spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                PlatformError::NotFound(path.to_string())
+                PlatformError::NotFound(path.clone())
             } else {
                 PlatformError::Io(e)
             }
         })?;
+        store_child(&self.sunshine_child, child);
         Ok(())
     }
 
     fn stop_sunshine(&self) -> Result<(), PlatformError> {
-        Self::run("taskkill", &["/IM", "sunshine.exe", "/F"])?;
+        if stop_tracked(&self.sunshine_child)? {
+            return Ok(());
+        }
+        let _ = Self::run("taskkill", &["/IM", "sunshine.exe", "/F"]);
         Ok(())
     }
 
@@ -120,12 +124,9 @@ impl Platform for WindowsPlatform {
         windowed: bool,
         resolution: Option<&str>,
     ) -> Result<(), PlatformError> {
-        let path = config
-            .moonlight_path
-            .as_deref()
-            .unwrap_or("Moonlight");
+        let path = resolve_binary(config.moonlight_path.as_deref(), MOONLIGHT_CANDIDATES)?;
 
-        let mut cmd = Command::new(path);
+        let mut cmd = Command::new(&path);
         cmd.arg("stream").arg(address).arg(app);
 
         if windowed {
@@ -135,17 +136,21 @@ impl Platform for WindowsPlatform {
             cmd.arg("--resolution").arg(res);
         }
 
-        cmd.spawn().map_err(|e| {
+        let child = cmd.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                PlatformError::NotFound(path.to_string())
+                PlatformError::NotFound(path.clone())
             } else {
                 PlatformError::Io(e)
             }
         })?;
+        store_child(&self.moonlight_child, child);
         Ok(())
     }
 
     fn stop_moonlight(&self) -> Result<(), PlatformError> {
+        if stop_tracked(&self.moonlight_child)? {
+            return Ok(());
+        }
         let _ = Self::run("taskkill", &["/IM", "Moonlight.exe", "/F"]);
         Ok(())
     }
@@ -166,19 +171,16 @@ impl Platform for WindowsPlatform {
         address: &str,
         pin: &str,
     ) -> Result<(), PlatformError> {
-        let path = config
-            .moonlight_path
-            .as_deref()
-            .unwrap_or("Moonlight");
+        let path = resolve_binary(config.moonlight_path.as_deref(), MOONLIGHT_CANDIDATES)?;
 
-        Command::new(path)
+        Command::new(&path)
             .args(["pair", address, "--pin", pin])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
-                    PlatformError::NotFound(path.to_string())
+                    PlatformError::NotFound(path.clone())
                 } else {
                     PlatformError::Io(e)
                 }

@@ -1,12 +1,30 @@
+use crate::common::{resolve_binary, stop_tracked, store_child, ChildSlot};
 use crate::{GpuInfo, MonitorInfo, Platform, PlatformError, PlatformInfo, ServiceInfo, ServiceStatus};
 use orrbeam_core::Config;
 use std::process::Command;
 
-pub struct MacOsPlatform;
+const SUNSHINE_CANDIDATES: &[&str] = &[
+    "sunshine",
+    "/Applications/Sunshine.app/Contents/MacOS/sunshine",
+];
+
+const MOONLIGHT_CANDIDATES: &[&str] = &[
+    "moonlight-qt",
+    "moonlight",
+    "/Applications/Moonlight.app/Contents/MacOS/Moonlight",
+];
+
+pub struct MacOsPlatform {
+    sunshine_child: ChildSlot,
+    moonlight_child: ChildSlot,
+}
 
 impl MacOsPlatform {
     pub fn new() -> Self {
-        Self
+        Self {
+            sunshine_child: ChildSlot::default(),
+            moonlight_child: ChildSlot::default(),
+        }
     }
 
     fn run(cmd: &str, args: &[&str]) -> Result<String, PlatformError> {
@@ -43,16 +61,7 @@ impl Platform for MacOsPlatform {
     }
 
     fn sunshine_status(&self, config: &Config) -> Result<ServiceInfo, PlatformError> {
-        let path = config
-            .sunshine_path
-            .clone()
-            .or_else(|| which::which("sunshine").ok().map(|p| p.to_string_lossy().to_string()))
-            .or_else(|| {
-                let app_path = "/Applications/Sunshine.app/Contents/MacOS/sunshine";
-                std::path::Path::new(app_path)
-                    .exists()
-                    .then(|| app_path.to_string())
-            });
+        let path = resolve_binary(config.sunshine_path.as_deref(), SUNSHINE_CANDIDATES).ok();
 
         let running = Self::run("pgrep", &["-x", "sunshine"]).is_ok();
 
@@ -71,12 +80,7 @@ impl Platform for MacOsPlatform {
     }
 
     fn moonlight_status(&self, config: &Config) -> Result<ServiceInfo, PlatformError> {
-        let path = config.moonlight_path.clone().or_else(|| {
-            let app_path = "/Applications/Moonlight.app";
-            std::path::Path::new(app_path)
-                .exists()
-                .then(|| app_path.to_string())
-        });
+        let path = resolve_binary(config.moonlight_path.as_deref(), MOONLIGHT_CANDIDATES).ok();
 
         let running = Self::run("pgrep", &["-f", "Moonlight"]).is_ok();
 
@@ -95,23 +99,24 @@ impl Platform for MacOsPlatform {
     }
 
     fn start_sunshine(&self, config: &Config) -> Result<(), PlatformError> {
-        let path = config
-            .sunshine_path
-            .as_deref()
-            .unwrap_or("sunshine");
+        let path = resolve_binary(config.sunshine_path.as_deref(), SUNSHINE_CANDIDATES)?;
 
-        Command::new(path).spawn().map_err(|e| {
+        let child = Command::new(&path).spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                PlatformError::NotFound(path.to_string())
+                PlatformError::NotFound(path.clone())
             } else {
                 PlatformError::Io(e)
             }
         })?;
+        store_child(&self.sunshine_child, child);
         Ok(())
     }
 
     fn stop_sunshine(&self) -> Result<(), PlatformError> {
-        Self::run("pkill", &["-x", "sunshine"])?;
+        if stop_tracked(&self.sunshine_child)? {
+            return Ok(());
+        }
+        let _ = Self::run("pkill", &["-x", "sunshine"]);
         Ok(())
     }
 
@@ -123,12 +128,9 @@ impl Platform for MacOsPlatform {
         windowed: bool,
         resolution: Option<&str>,
     ) -> Result<(), PlatformError> {
-        let path = config
-            .moonlight_path
-            .as_deref()
-            .unwrap_or("/Applications/Moonlight.app/Contents/MacOS/Moonlight");
+        let path = resolve_binary(config.moonlight_path.as_deref(), MOONLIGHT_CANDIDATES)?;
 
-        let mut cmd = Command::new(path);
+        let mut cmd = Command::new(&path);
         cmd.arg("stream").arg(address).arg(app);
 
         if windowed {
@@ -138,17 +140,22 @@ impl Platform for MacOsPlatform {
             cmd.arg("--resolution").arg(res);
         }
 
-        cmd.spawn().map_err(|e| {
+        let child = cmd.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                PlatformError::NotFound(path.to_string())
+                PlatformError::NotFound(path.clone())
             } else {
                 PlatformError::Io(e)
             }
         })?;
+        store_child(&self.moonlight_child, child);
         Ok(())
     }
 
     fn stop_moonlight(&self) -> Result<(), PlatformError> {
+        if stop_tracked(&self.moonlight_child)? {
+            return Ok(());
+        }
+        // Fallback: match full command line to catch the .app bundle process.
         let _ = Self::run("pkill", &["-f", "Moonlight"]);
         Ok(())
     }
@@ -178,19 +185,16 @@ impl Platform for MacOsPlatform {
         address: &str,
         pin: &str,
     ) -> Result<(), PlatformError> {
-        let path = config
-            .moonlight_path
-            .as_deref()
-            .unwrap_or("/Applications/Moonlight.app/Contents/MacOS/Moonlight");
+        let path = resolve_binary(config.moonlight_path.as_deref(), MOONLIGHT_CANDIDATES)?;
 
-        Command::new(path)
+        Command::new(&path)
             .args(["pair", address, "--pin", pin])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
-                    PlatformError::NotFound(path.to_string())
+                    PlatformError::NotFound(path.clone())
                 } else {
                     PlatformError::Io(e)
                 }
