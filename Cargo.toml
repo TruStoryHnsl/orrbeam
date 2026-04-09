@@ -12,7 +12,22 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2"
 anyhow = "1"
+
+# Control plane (WI-1, added for commercial-rigor phase 5)
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "tower-log", "tracing", "macros"] }
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace", "limit", "timeout"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2"
+tokio-rustls = "0.26"
+rcgen = { version = "0.13", features = ["pem"] }
+sha2 = "0.10"
+base64 = "0.22"
+time = { version = "0.3", features = ["serde", "formatting", "macros"] }
+uuid = { version = "1", features = ["v4", "serde"] }
