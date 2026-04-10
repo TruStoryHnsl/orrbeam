@@ -60,11 +60,11 @@ pub async fn submit_pin_local(
             .await
         {
             Ok(resp) if resp.status().is_success() => {
-                if let Ok(data) = resp.json::<PinResponse>().await {
-                    if data.status.unwrap_or(false) {
-                        tracing::info!("PIN accepted by local Sunshine (attempt {attempt})");
-                        return Ok(());
-                    }
+                if let Ok(data) = resp.json::<PinResponse>().await
+                    && data.status.unwrap_or(false)
+                {
+                    tracing::info!("PIN accepted by local Sunshine (attempt {attempt})");
+                    return Ok(());
                 }
                 tracing::debug!("PIN attempt {attempt}/{max_attempts}: not yet accepted");
             }

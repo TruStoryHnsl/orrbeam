@@ -120,14 +120,15 @@ pub fn write_conf(updates: &HashMap<String, String>) -> Result<(), SunshineConfE
 
     for line in existing.lines() {
         let trimmed = line.trim();
-        if !trimmed.is_empty() && !trimmed.starts_with('#') {
-            if let Some((key, _)) = trimmed.split_once('=') {
-                let key = key.trim();
-                if let Some(value) = updates.get(key) {
-                    new_lines.push(format!("{key} = {value}"));
-                    written_keys.insert(key.to_string());
-                    continue;
-                }
+        if !trimmed.is_empty()
+            && !trimmed.starts_with('#')
+            && let Some((key, _)) = trimmed.split_once('=')
+        {
+            let key = key.trim();
+            if let Some(value) = updates.get(key) {
+                new_lines.push(format!("{key} = {value}"));
+                written_keys.insert(key.to_string());
+                continue;
             }
         }
         new_lines.push(line.to_string());

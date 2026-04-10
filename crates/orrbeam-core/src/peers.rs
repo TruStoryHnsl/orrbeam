@@ -238,29 +238,29 @@ impl TrustedPeerStore {
     /// The fingerprint index is updated atomically with the peers map.
     pub fn upsert(&mut self, peer: TrustedPeer) -> Result<(), PeersError> {
         // Collision guard: reject if a *different* peer owns this fingerprint.
-        if let Some(owner) = self.by_fingerprint.get(&peer.ed25519_fingerprint) {
-            if owner != &peer.name {
-                warn!(
-                    fingerprint = %peer.ed25519_fingerprint,
-                    existing_owner = %owner,
-                    new_peer = %peer.name,
-                    "fingerprint collision — rejecting upsert"
-                );
-                return Err(PeersError::FingerprintCollision {
-                    existing: owner.clone(),
-                    fingerprint: peer.ed25519_fingerprint.clone(),
-                });
-            }
+        if let Some(owner) = self.by_fingerprint.get(&peer.ed25519_fingerprint)
+            && owner != &peer.name
+        {
+            warn!(
+                fingerprint = %peer.ed25519_fingerprint,
+                existing_owner = %owner,
+                new_peer = %peer.name,
+                "fingerprint collision — rejecting upsert"
+            );
+            return Err(PeersError::FingerprintCollision {
+                existing: owner.clone(),
+                fingerprint: peer.ed25519_fingerprint.clone(),
+            });
         }
 
         info!(name = %peer.name, fingerprint = %peer.ed25519_fingerprint, "adding/updating trusted peer");
 
         // Remove old fingerprint index entry if the peer already exists with a
         // different fingerprint (peer renamed their key).
-        if let Some(existing) = self.peers.get(&peer.name) {
-            if existing.ed25519_fingerprint != peer.ed25519_fingerprint {
-                self.by_fingerprint.remove(&existing.ed25519_fingerprint);
-            }
+        if let Some(existing) = self.peers.get(&peer.name)
+            && existing.ed25519_fingerprint != peer.ed25519_fingerprint
+        {
+            self.by_fingerprint.remove(&existing.ed25519_fingerprint);
         }
 
         self.by_fingerprint
