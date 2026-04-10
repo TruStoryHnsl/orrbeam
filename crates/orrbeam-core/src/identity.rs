@@ -85,6 +85,11 @@ impl Identity {
         }
     }
 
+    /// Expose the signing key for TLS certificate derivation.
+    pub fn signing_key(&self) -> &SigningKey {
+        &self.signing_key
+    }
+
     fn key_path() -> PathBuf {
         let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
         base.join("orrbeam").join("identity").join("signing.key")
