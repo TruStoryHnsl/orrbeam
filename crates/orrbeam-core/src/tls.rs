@@ -277,13 +277,18 @@ mod tests {
     use super::*;
     use crate::identity::Identity;
     use std::env;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
+
+    /// Serialize all tests that touch the process-global `XDG_DATA_HOME` env var.
+    /// Without this, parallel test threads race on `set_var` and one test may
+    /// read another test's (already-dropped) temp directory.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     /// Override the XDG_DATA_HOME env var so that `dirs::data_local_dir()` returns
     /// our temp directory, isolating tests from the real user data dir.
-    fn with_temp_data_dir(tmp: &TempDir) -> () {
-        // Safety: test-only; single-threaded test setup before any threads are spawned.
+    fn with_temp_data_dir(tmp: &TempDir) {
+        // Safety: test-only; caller holds ENV_LOCK.
         unsafe { env::set_var("XDG_DATA_HOME", tmp.path()) };
     }
 
@@ -295,6 +300,7 @@ mod tests {
 
     #[test]
     fn test_generate_cert_and_stable_fingerprint() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let tmp = TempDir::new().unwrap();
         with_temp_data_dir(&tmp);
 
@@ -317,6 +323,7 @@ mod tests {
 
     #[test]
     fn test_load_or_create_is_idempotent() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let tmp = TempDir::new().unwrap();
         with_temp_data_dir(&tmp);
 
@@ -341,6 +348,7 @@ mod tests {
 
     #[test]
     fn test_rustls_server_config_succeeds() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let tmp = TempDir::new().unwrap();
         with_temp_data_dir(&tmp);
 
@@ -365,6 +373,7 @@ mod tests {
 
     #[test]
     fn test_rustls_server_config_is_send_sync() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let tmp = TempDir::new().unwrap();
         with_temp_data_dir(&tmp);
 
