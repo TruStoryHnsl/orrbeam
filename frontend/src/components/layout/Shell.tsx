@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { usePlatformStore } from "@/stores/platform";
+import { SettingsDrawer } from "@/components/settings/SettingsDrawer";
 import orrbeamLogo from "@/assets/orrbeam-logo.png";
 
 const TRAY_NOTICE_KEY = "orrbeam-tray-notice-shown";
@@ -8,6 +9,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const identity = usePlatformStore((s) => s.identity);
   const info = usePlatformStore((s) => s.info);
   const [showTrayNotice, setShowTrayNotice] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     // Listen for the window close event to show a one-time tray notice
