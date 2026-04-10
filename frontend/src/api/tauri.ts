@@ -4,6 +4,8 @@
 /// (injected via the webview preload script). We also check `window.isTauri`
 /// as the official Tauri v2 detection signal. We check both to be safe.
 
+import type { PeeringProgress } from "@/types/peers";
+
 function detectTauri(): boolean {
   if (typeof window === "undefined") return false;
   // Official Tauri v2 detection (set by the runtime)
@@ -117,6 +119,86 @@ const mocks: Record<string, unknown> = {
     fingerprint: "a1b2c3d4e5f6a7b8",
     public_key: [],
   },
+
+  // ── Peer management (WI-12) ──────────────────────────────────────────────
+
+  list_trusted_peers: [
+    {
+      name: "orrpheus",
+      ed25519_fingerprint: "a1b2c3d4e5f6a7b8",
+      ed25519_public_key_b64: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      cert_sha256: "e3b0c44298fc1c149afbf4c8996fb924274a01d44c337b24e2b80f4903c7d90b",
+      address: "100.66.55.59",
+      control_port: 47782,
+      permissions: {
+        can_query_status: true,
+        can_start_sunshine: true,
+        can_stop_sunshine: true,
+        can_submit_pin: true,
+        can_list_peers: true,
+      },
+      tags: ["owned", "macos"],
+      added_at: "2026-04-09T13:00:00Z",
+      last_seen_at: "2026-04-09T15:12:34Z",
+      note: "M1 Pro MacBook",
+    },
+  ],
+
+  fetch_peer_hello: {
+    node_name: "mock-peer",
+    ed25519_fingerprint: "deadbeefcafebabe",
+    ed25519_public_key_b64: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
+    cert_sha256: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab",
+    control_port: 47782,
+    sunshine_available: true,
+    moonlight_available: true,
+    os: "macos",
+    version: "orrbeam/1",
+  },
+
+  confirm_trusted_peer: null,
+  remove_trusted_peer: true,
+  update_peer_permissions: null,
+
+  request_mutual_trust: {
+    request_id: "550e8400-e29b-41d4-a716-446655440000",
+    receiver_hello: {
+      node_name: "mock-peer",
+      ed25519_fingerprint: "deadbeefcafebabe",
+      ed25519_public_key_b64: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
+      cert_sha256: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab",
+      control_port: 47782,
+      sunshine_available: true,
+      moonlight_available: true,
+      os: "macos",
+      version: "orrbeam/1",
+    },
+  },
+
+  approve_mutual_trust_request: null,
+  reject_mutual_trust_request: null,
+
+  list_inbound_mutual_trust_requests: [
+    {
+      request_id: "660e8400-e29b-41d4-a716-446655440001",
+      initiator_name: "orrion",
+      initiator_fingerprint: "1234567890abcdef",
+      note: "work machine",
+      created_at: "2026-04-09T15:00:00Z",
+    },
+  ],
+
+  connect_to_peer: null,
+  remote_peer_status: {
+    sunshine: { status: "running" },
+    moonlight: { status: "installed" },
+  },
+
+  get_tls_fingerprint: {
+    cert_sha256: "cafe1234abcdef5678cafe1234abcdef5678cafe1234abcdef5678cafe1234ab",
+    ed25519_fingerprint: "abcd1234efgh5678",
+    control_port: 47782,
+  },
 };
 
 function mockInvoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
@@ -136,4 +218,34 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
     }
   }
   return mockInvoke(cmd, args);
+}
+
+// ── Event helpers ────────────────────────────────────────────────────────────
+
+export type PeeringProgressCallback = (progress: PeeringProgress) => void;
+
+/**
+ * Subscribe to `peering:progress` events from the Tauri backend.
+ * Returns an unlisten/cleanup function (call it to unsubscribe).
+ *
+ * In browser mock mode, listens for a custom DOM event on `window` so that
+ * dev tooling can dispatch synthetic progress events for testing.
+ */
+export async function onPeeringProgress(
+  cb: PeeringProgressCallback
+): Promise<() => void> {
+  if (IS_TAURI) {
+    const { listen } = await import("@tauri-apps/api/event");
+    const unlisten = await listen<PeeringProgress>("peering:progress", (event) => {
+      cb(event.payload);
+    });
+    return unlisten;
+  } else {
+    // Mock mode: forward synthetic CustomEvents dispatched on window
+    const handler = (e: Event) => {
+      cb((e as CustomEvent<PeeringProgress>).detail);
+    };
+    window.addEventListener("peering:progress", handler);
+    return () => window.removeEventListener("peering:progress", handler);
+  }
 }
