@@ -32,6 +32,10 @@ pub struct Config {
     pub sunshine_password: String,
     pub moonlight_path: Option<String>,
     pub static_nodes: Vec<StaticNode>,
+    /// Address the control-plane HTTPS server binds to.
+    pub api_bind: String,
+    /// TCP port the control-plane HTTPS server listens on.
+    pub api_port: u16,
 }
 
 impl Default for Config {
@@ -48,6 +52,8 @@ impl Default for Config {
             sunshine_password: "sunshine".to_string(),
             moonlight_path: None,
             static_nodes: Vec::new(),
+            api_bind: "0.0.0.0".to_string(),
+            api_port: 47782,
         }
     }
 }

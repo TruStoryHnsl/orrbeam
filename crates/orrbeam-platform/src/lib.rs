@@ -10,6 +10,8 @@ mod windows;
 
 pub use detect::{GpuInfo, MonitorInfo, PlatformInfo, ServiceInfo, ServiceStatus};
 
+use std::sync::Arc;
+
 use orrbeam_core::Config;
 use thiserror::Error;
 
@@ -71,18 +73,18 @@ pub trait Platform: Send + Sync {
 }
 
 /// Get the platform implementation for the current OS.
-pub fn get_platform() -> Box<dyn Platform> {
+pub fn get_platform() -> Arc<dyn Platform> {
     #[cfg(target_os = "linux")]
     {
-        Box::new(linux::LinuxPlatform::new())
+        Arc::new(linux::LinuxPlatform::new())
     }
     #[cfg(target_os = "macos")]
     {
-        Box::new(macos::MacOsPlatform::new())
+        Arc::new(macos::MacOsPlatform::new())
     }
     #[cfg(target_os = "windows")]
     {
-        Box::new(windows::WindowsPlatform::new())
+        Arc::new(windows::WindowsPlatform::new())
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {

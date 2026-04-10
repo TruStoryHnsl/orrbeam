@@ -13,7 +13,7 @@ pub struct AppState {
     pub config: Arc<RwLock<Config>>,
     pub identity: Identity,
     pub registry: Arc<RwLock<NodeRegistry>>,
-    pub platform: Box<dyn orrbeam_platform::Platform>,
+    pub platform: std::sync::Arc<dyn orrbeam_platform::Platform>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -77,6 +77,7 @@ pub fn run() {
             commands::settings::get_config,
             commands::settings::save_config,
             commands::settings::get_identity,
+            commands::settings::get_tls_fingerprint,
         ])
         .setup(|app| {
             tray::create_tray(app)?;

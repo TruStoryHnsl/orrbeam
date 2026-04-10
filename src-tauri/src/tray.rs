@@ -106,14 +106,13 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
                     None
                 }
             };
-            if let Some(config) = platform_status {
-                if let Err(e) =
+            if let Some(config) = platform_status
+                && let Err(e) =
                     state
                         .platform
                         .start_moonlight(&config, address, "Desktop", false, None)
-                {
-                    tracing::error!("failed to connect to {address}: {e}");
-                }
+            {
+                tracing::error!("failed to connect to {address}: {e}");
             }
         }
         _ => {}
