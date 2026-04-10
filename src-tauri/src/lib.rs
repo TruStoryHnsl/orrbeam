@@ -18,6 +18,12 @@ pub struct AppState {
     pub platform: Arc<dyn orrbeam_platform::Platform + Send + Sync>,
     pub tls: Arc<orrbeam_core::tls::TlsIdentity>,
     pub peers: Arc<RwLock<orrbeam_core::peers::TrustedPeerStore>>,
+    /// In-flight mutual-trust TOFU requests keyed by UUID.
+    ///
+    /// This `Arc` is shared with [`orrbeam_net::server::ControlState`] so that
+    /// the server's inbound-request handlers and the Tauri command layer both
+    /// read/write the same map.
+    pub pending_mutual_trust: Arc<RwLock<std::collections::HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>>,
     pub control_shutdown: CancellationToken,
 }
 
@@ -79,6 +85,12 @@ pub fn run() {
     // Cancellation token used to stop the control server on app exit.
     let control_shutdown = CancellationToken::new();
 
+    // Shared map for in-flight mutual-trust TOFU requests.  The same Arc is
+    // given to both AppState (for Tauri commands) and ControlState (for the
+    // HTTP server inbound handler) so they always operate on the same data.
+    let pending_mutual_trust: Arc<RwLock<HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+
     let registry = Arc::new(RwLock::new(NodeRegistry::new()));
     let platform = get_platform();
     let config_arc = Arc::new(RwLock::new(config.clone()));
@@ -90,6 +102,7 @@ pub fn run() {
         platform: platform.clone(),
         tls: tls.clone(),
         peers: peers.clone(),
+        pending_mutual_trust: pending_mutual_trust.clone(),
         control_shutdown: control_shutdown.clone(),
     };
 
@@ -163,6 +176,17 @@ pub fn run() {
             commands::moonlight::stop_moonlight,
             commands::pairing::pair_initiate,
             commands::pairing::pair_accept,
+            commands::remote::list_trusted_peers,
+            commands::remote::fetch_peer_hello,
+            commands::remote::confirm_trusted_peer,
+            commands::remote::remove_trusted_peer,
+            commands::remote::update_peer_permissions,
+            commands::remote::request_mutual_trust,
+            commands::remote::approve_mutual_trust_request,
+            commands::remote::reject_mutual_trust_request,
+            commands::remote::list_inbound_mutual_trust_requests,
+            commands::remote::connect_to_peer,
+            commands::remote::remote_peer_status,
             commands::discovery::get_nodes,
             commands::discovery::get_node_count,
             commands::settings::get_config,
@@ -179,13 +203,15 @@ pub fn run() {
             });
 
             // Build ControlState with all required fields.
+            // `pending_mutual_trust` is the *same* Arc held in AppState so that
+            // the HTTP server and Tauri commands share the live request map.
             let control_state = Arc::new(orrbeam_net::server::ControlState {
                 identity: app_state.identity.clone(),
                 tls: app_state.tls.clone(),
                 config: app_state.config.clone(),
                 peers: app_state.peers.clone(),
                 nonces: orrbeam_net::server::NonceCache::new(),
-                pending_mutual_trust: Arc::new(RwLock::new(HashMap::new())),
+                pending_mutual_trust: app_state.pending_mutual_trust.clone(),
                 platform: app_state.platform.clone(),
                 event_emitter: emitter,
                 shutdown: app_state.control_shutdown.clone(),
