@@ -13,6 +13,7 @@
 use crate::identity::Identity;
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, SanType};
 use rustls::ServerConfig;
+use std::sync::Arc;
 use sha2::{Digest, Sha256};
 use std::net::IpAddr;
 use std::path::PathBuf;
@@ -114,7 +115,13 @@ impl TlsIdentity {
         let private_key: PrivateKeyDer<'static> = private_key(&mut key_reader)?
             .ok_or_else(|| TlsError::InvalidKey("no private key found in PEM".into()))?;
 
-        let config = ServerConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
+        // Explicitly provide the crypto provider to avoid relying on a global
+        // default — global CryptoProvider::install_default() is process-wide
+        // and causes test-order failures when multiple crates run in the same
+        // workspace test harness.
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let config = ServerConfig::builder_with_provider(provider)
+            .with_protocol_versions(&[&rustls::version::TLS13])?
             .with_no_client_auth()
             .with_single_cert(cert_chain, private_key)?;
 
