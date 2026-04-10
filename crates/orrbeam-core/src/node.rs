@@ -34,6 +34,8 @@ pub struct Node {
     pub moonlight_available: bool,
     pub os: Option<String>,
     pub encoder: Option<String>,
+    #[serde(default)]
+    pub cert_sha256: Option<String>,
 }
 
 /// Registry of all known nodes.
