@@ -47,8 +47,9 @@ pub fn run() {
     let discovery_config = config.clone();
     let discovery_registry = registry.clone();
     tauri::async_runtime::spawn(async move {
-        let manager = DiscoveryManager::new(discovery_config, discovery_registry);
-        if let Err(e) = manager.start().await {
+        let mut manager = DiscoveryManager::new(discovery_config, discovery_registry);
+        // TODO(WI-8): pass RegistrationInfo once TLS identity is wired in.
+        if let Err(e) = manager.start(None).await {
             tracing::error!("discovery failed to start: {e}");
         }
     });

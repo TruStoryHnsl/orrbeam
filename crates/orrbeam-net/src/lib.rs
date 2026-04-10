@@ -1,7 +1,9 @@
+pub mod client;
 pub mod mdns;
 pub mod orrtellite;
 pub mod server;
 
+use mdns_sd::ServiceDaemon;
 use orrbeam_core::{Config, Node, NodeRegistry, NodeState};
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -18,19 +20,48 @@ pub enum DiscoveryError {
     Network(#[from] reqwest::Error),
 }
 
+/// Parameters needed to register this node as an mDNS service so peers can
+/// discover it on the LAN.
+pub struct RegistrationInfo {
+    /// Ed25519 public-key fingerprint (hex-encoded).
+    pub fingerprint: String,
+    /// SHA-256 of the node's TLS certificate (hex-encoded).
+    pub cert_sha256: String,
+    /// Whether Sunshine (host) is available on this node.
+    pub sunshine_available: bool,
+    /// Whether Moonlight (client) is available on this node.
+    pub moonlight_available: bool,
+    /// Operating system identifier (e.g. `"linux"`, `"macos"`, `"windows"`).
+    pub os: String,
+    /// Hardware encoder name, if known (e.g. `"nvenc"`, `"videotoolbox"`).
+    pub encoder: Option<String>,
+    /// Control-plane port this node is listening on.
+    pub port: u16,
+}
+
 /// Manages node discovery across all sources.
 pub struct DiscoveryManager {
     registry: Arc<RwLock<NodeRegistry>>,
     config: Config,
+    /// Keeps the mDNS registration alive for the lifetime of the manager.
+    /// Dropping the inner `ServiceDaemon` would unregister the service.
+    _mdns_registration: Option<ServiceDaemon>,
 }
 
 impl DiscoveryManager {
     pub fn new(config: Config, registry: Arc<RwLock<NodeRegistry>>) -> Self {
-        Self { registry, config }
+        Self {
+            registry,
+            config,
+            _mdns_registration: None,
+        }
     }
 
     /// Start all enabled discovery backends.
-    pub async fn start(&self) -> Result<(), DiscoveryError> {
+    ///
+    /// If `registration` is `Some` and mDNS is enabled, this node will also
+    /// advertise itself on the LAN so peers can discover it via mDNS.
+    pub async fn start(&mut self, registration: Option<RegistrationInfo>) -> Result<(), DiscoveryError> {
         if self.config.mdns_enabled {
             tracing::info!("starting mDNS discovery");
             let registry = self.registry.clone();
@@ -39,6 +70,12 @@ impl DiscoveryManager {
                     tracing::error!("mDNS browse error: {e}");
                 }
             });
+
+            if let Some(ref reg_info) = registration {
+                tracing::info!("registering this node via mDNS as '{}'", self.config.node_name);
+                let daemon = mdns::register(&self.config.node_name, reg_info)?;
+                self._mdns_registration = Some(daemon);
+            }
         }
 
         if self.config.orrtellite_enabled {
