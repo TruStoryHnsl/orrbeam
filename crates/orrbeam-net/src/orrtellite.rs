@@ -53,6 +53,7 @@ pub async fn poll(
                             moonlight_available: false,
                             os: None,
                             encoder: None,
+                            cert_sha256: None,
                         });
                     }
                 }

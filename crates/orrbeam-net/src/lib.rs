@@ -1,5 +1,6 @@
 pub mod mdns;
 pub mod orrtellite;
+pub mod server;
 
 use orrbeam_core::{Config, Node, NodeRegistry, NodeState};
 use std::net::IpAddr;
@@ -68,6 +69,7 @@ impl DiscoveryManager {
                         moonlight_available: false,
                         os: None,
                         encoder: None,
+                        cert_sha256: None,
                     });
                 }
             }

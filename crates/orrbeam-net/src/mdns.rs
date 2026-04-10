@@ -26,7 +26,7 @@ pub async fn browse(registry: Arc<RwLock<NodeRegistry>>) -> Result<(), crate::Di
                     if let Some(addr) = info.get_addresses().iter().next() {
                         let node = Node {
                             name: name.clone(),
-                            address: (*addr).into(),
+                            address: *addr,
                             port: info.get_port(),
                             state: NodeState::Online,
                             source: DiscoverySource::Mdns,
@@ -41,6 +41,7 @@ pub async fn browse(registry: Arc<RwLock<NodeRegistry>>) -> Result<(), crate::Di
                                 .is_some_and(|v| v == "true"),
                             os: info.get_property_val_str("os").map(String::from),
                             encoder: info.get_property_val_str("encoder").map(String::from),
+                            cert_sha256: None,
                         };
 
                         let reg = registry.clone();
