@@ -1,0 +1,2 @@
+msrv = "1.80.0"
+doc-valid-idents = ["Ed25519", "GitHub", "Headscale", "Moonlight", "Orrbeam", "Sunshine", "Tauri", "Tokio", "Vitest"]

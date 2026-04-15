@@ -13,8 +13,7 @@ const RESOLUTION_OPTIONS = [
 ];
 
 export function MoonlightPanel() {
-  const { status, nodes, connectedTo, loading, error, connect, disconnect } =
-    useMoonlightStore();
+  const { status, nodes, connectedTo, loading, error, connect, disconnect } = useMoonlightStore();
 
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [windowed, setWindowed] = useState(false);
@@ -49,11 +48,7 @@ export function MoonlightPanel() {
       <Section title="Service">
         <InfoRow
           label="Status"
-          value={
-            connectedTo
-              ? `Streaming from ${connectedTo}`
-              : status?.status ?? "checking..."
-          }
+          value={connectedTo ? `Streaming from ${connectedTo}` : (status?.status ?? "checking...")}
         />
         {status?.version && <InfoRow label="Version" value={status.version} />}
       </Section>
@@ -61,12 +56,7 @@ export function MoonlightPanel() {
       {/* Active connection — disconnect button */}
       {connectedTo && (
         <div className="mb-4">
-          <Button
-            variant="danger"
-            onClick={disconnect}
-            disabled={loading}
-            className="w-full"
-          >
+          <Button variant="danger" onClick={disconnect} disabled={loading} className="w-full">
             {loading ? "Disconnecting..." : "Disconnect"}
           </Button>
         </div>
@@ -135,9 +125,7 @@ export function MoonlightPanel() {
       {/* Available Nodes */}
       <Section title={`Nodes (${onlineNodes.length})`}>
         {onlineNodes.length === 0 && !loading && (
-          <p className="text-xs text-neutral-500 italic">
-            No nodes discovered yet...
-          </p>
+          <p className="text-xs text-neutral-500 italic">No nodes discovered yet...</p>
         )}
 
         <div className="space-y-1.5">
@@ -176,18 +164,14 @@ export function MoonlightPanel() {
 
       {/* Error */}
       {error && (
-        <div className="text-xs text-red-400 bg-red-500/10 rounded px-2 py-1.5 mb-3">
-          {error}
-        </div>
+        <div className="text-xs text-red-400 bg-red-500/10 rounded px-2 py-1.5 mb-3">{error}</div>
       )}
 
       {/* Connect button */}
       {!connectedTo && (
         <div className="mt-auto pt-4 space-y-2">
           {!isInstalled ? (
-            <p className="text-xs text-neutral-500">
-              Moonlight is not installed.
-            </p>
+            <p className="text-xs text-neutral-500">Moonlight is not installed.</p>
           ) : (
             <>
               <Button
@@ -212,8 +196,7 @@ export function MoonlightPanel() {
                   className="w-full"
                   size="sm"
                 >
-                  Pair with{" "}
-                  {nodes.find((n) => n.address === selectedNode)?.name ?? "node"}
+                  Pair with {nodes.find((n) => n.address === selectedNode)?.name ?? "node"}
                 </Button>
               )}
             </>
@@ -260,13 +243,9 @@ function NodeCard({
       } disabled:cursor-not-allowed`}
     >
       <div className="flex items-center gap-2">
-        <StatusDot
-          status={node.state as "online" | "offline" | "hosting" | "connected"}
-        />
+        <StatusDot status={node.state as "online" | "offline" | "hosting" | "connected"} />
         <div>
-          <div className="text-sm text-neutral-200 font-medium">
-            {node.name}
-          </div>
+          <div className="text-sm text-neutral-200 font-medium">{node.name}</div>
           <div className="flex items-center gap-2 text-[10px] text-neutral-500">
             {node.os && <span>{node.os}</span>}
             {node.encoder && <span>{node.encoder}</span>}
@@ -275,28 +254,16 @@ function NodeCard({
         </div>
       </div>
 
-      {isConnected && (
-        <span className="text-xs text-moonlight-bright font-medium">
-          Streaming
-        </span>
-      )}
+      {isConnected && <span className="text-xs text-moonlight-bright font-medium">Streaming</span>}
       {isSelected && !isConnected && node.sunshine_available && (
         <span className="text-[10px] text-moonlight">selected</span>
       )}
-      {!node.sunshine_available && (
-        <span className="text-[10px] text-neutral-600">no host</span>
-      )}
+      {!node.sunshine_available && <span className="text-[10px] text-neutral-600">no host</span>}
     </button>
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mb-4">
       <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-2">
