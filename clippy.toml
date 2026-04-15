@@ -1,0 +1,8 @@
+# Workspace-wide Clippy configuration
+msrv = "1.80"
+
+# Allow longer lines in some cases (matches rustfmt max_width)
+too-many-lines-threshold = 150
+
+# Cognitive complexity threshold for functions
+cognitive-complexity-threshold = 30

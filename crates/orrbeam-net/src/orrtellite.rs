@@ -54,6 +54,7 @@ pub async fn poll(
                             os: None,
                             encoder: None,
                             cert_sha256: None,
+                            last_seen: None,
                         });
                     }
                 }

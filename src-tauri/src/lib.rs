@@ -91,7 +91,15 @@ pub fn run() {
     let pending_mutual_trust: Arc<RwLock<HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>> =
         Arc::new(RwLock::new(HashMap::new()));
 
-    let registry = Arc::new(RwLock::new(NodeRegistry::new()));
+    // Load the persistent registry from disk; fall back to empty on first run.
+    let persisted_registry = {
+        let path = NodeRegistry::default_path();
+        NodeRegistry::load(&path).unwrap_or_else(|e| {
+            tracing::warn!("failed to load node registry, starting fresh: {e}");
+            NodeRegistry::new()
+        })
+    };
+    let registry = Arc::new(RwLock::new(persisted_registry));
     let platform = get_platform();
     let config_arc = Arc::new(RwLock::new(config.clone()));
 
@@ -189,6 +197,9 @@ pub fn run() {
             commands::remote::remote_peer_status,
             commands::discovery::get_nodes,
             commands::discovery::get_node_count,
+            commands::discovery::add_node,
+            commands::discovery::remove_node,
+            commands::discovery::list_nodes,
             commands::settings::get_config,
             commands::settings::save_config,
             commands::settings::get_identity,

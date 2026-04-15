@@ -9,5 +9,5 @@ pub mod wire;
 
 pub use config::Config;
 pub use identity::Identity;
-pub use node::{Node, NodeRegistry, NodeState};
+pub use node::{DiscoverySource, Node, NodeRegistry, NodeRegistryError, NodeState};
 pub use sunshine_conf::SunshineSettings;

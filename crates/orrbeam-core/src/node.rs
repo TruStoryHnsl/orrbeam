@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::path::{Path, PathBuf};
+use thiserror::Error;
+use time::OffsetDateTime;
 
 /// Current state of a node in the mesh.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,6 +39,23 @@ pub struct Node {
     pub encoder: Option<String>,
     #[serde(default)]
     pub cert_sha256: Option<String>,
+    /// Timestamp of the last time this node was seen on the mesh.
+    /// `None` for nodes that have never been observed (manually added).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "time::serde::rfc3339::option"
+    )]
+    pub last_seen: Option<OffsetDateTime>,
+}
+
+/// Errors produced by [`NodeRegistry`] persistence operations.
+#[derive(Debug, Error)]
+pub enum NodeRegistryError {
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("YAML serialization error: {0}")]
+    Yaml(#[from] serde_yaml::Error),
 }
 
 /// Registry of all known nodes.
@@ -49,8 +69,9 @@ impl NodeRegistry {
         Self::default()
     }
 
-    /// Insert or update a node.
-    pub fn upsert(&mut self, node: Node) {
+    /// Insert or update a node, recording `last_seen` as now.
+    pub fn upsert(&mut self, mut node: Node) {
+        node.last_seen = Some(OffsetDateTime::now_utc());
         self.nodes.insert(node.name.clone(), node);
     }
 
@@ -85,5 +106,47 @@ impl NodeRegistry {
             .values()
             .filter(|n| n.state != NodeState::Offline)
             .count()
+    }
+
+    // ── Persistence ──────────────────────────────────────────────────────────
+
+    /// Default path for the persistent registry: `~/.config/orrbeam/known_nodes.yaml`.
+    pub fn default_path() -> PathBuf {
+        dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("orrbeam")
+            .join("known_nodes.yaml")
+    }
+
+    /// Load the registry from a YAML file, returning an empty registry if the
+    /// file does not exist.
+    pub fn load(path: impl AsRef<Path>) -> Result<Self, NodeRegistryError> {
+        let path = path.as_ref();
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let contents = std::fs::read_to_string(path)?;
+        let nodes: HashMap<String, Node> = serde_yaml::from_str(&contents)?;
+        Ok(Self { nodes })
+    }
+
+    /// Save the registry to a YAML file, creating parent directories as needed.
+    pub fn save(&self, path: impl AsRef<Path>) -> Result<(), NodeRegistryError> {
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let contents = serde_yaml::to_string(&self.nodes)?;
+        std::fs::write(path, contents)?;
+        Ok(())
+    }
+
+    /// Mark a node offline (sets state to `Offline`) without removing it from
+    /// the persistent store, so it continues to appear in the UI with a greyed
+    /// status.
+    pub fn mark_offline(&mut self, name: &str) {
+        if let Some(node) = self.nodes.get_mut(name) {
+            node.state = NodeState::Offline;
+        }
     }
 }
