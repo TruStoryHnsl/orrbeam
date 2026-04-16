@@ -93,6 +93,7 @@ async fn spawn_test_server() -> (SocketAddr, CancellationToken, tempfile::TempDi
         peers: Arc::new(RwLock::new(orrbeam_core::peers::TrustedPeerStore::default())),
         nonces: NonceCache::new(),
         pending_mutual_trust: Arc::new(RwLock::new(HashMap::new())),
+        ip_tofu_attempts: Arc::new(RwLock::new(HashMap::new())),
         platform: Arc::new(StubPlatform),
         event_emitter: Arc::new(NoopEmitter),
         shutdown: shutdown.clone(),
