@@ -115,6 +115,60 @@ This keeps the user model simple: each machine is a node, not a permanently fixe
 - Orrtellite/Headscale HTTP APIs provide non-LAN peer discovery
 - Signed HTTP control routes plus TLS identity protect peer management and remote actions
 
+## Config File Locations
+
+All paths follow XDG conventions via the [`dirs`](https://docs.rs/dirs) crate.
+
+| File | Default path | Purpose |
+| --- | --- | --- |
+| Main config | `~/.config/orrbeam/config.yaml` | `Config` struct — bind address, port, discovery settings, orrtellite credentials |
+| Trusted peers | `~/.config/orrbeam/trusted_peers.yaml` | `TrustedPeerStore` — do not edit by hand |
+| Ed25519 signing key | `~/.local/share/orrbeam/identity/signing.key` | Raw 32-byte key; generated on first run |
+| TLS certificate (PEM) | `~/.local/share/orrbeam/identity/control.cert.pem` | Self-signed cert derived from signing key |
+| TLS private key (PEM) | `~/.local/share/orrbeam/identity/control.key.pem` | Private key for TLS termination |
+
+The identity and TLS files are generated automatically if absent. Deleting them generates new keys, which will invalidate all existing peer trust relationships (fingerprint changes).
+
+## Control Plane Auth Flow
+
+Every authenticated request goes through three verification layers:
+
+```text
+Caller (ControlClient)                    Server (axum middleware)
+─────────────────────                     ────────────────────────
+1. Serialize body to JSON bytes
+2. Compute canonical string:
+     METHOD\nPATH\nTIMESTAMP\nNONCE\n
+     SHA256(body_bytes_hex)
+3. Sign canonical string with
+   Ed25519 signing key
+4. Attach headers:
+     X-Orrbeam-Timestamp: <unix_secs>
+     X-Orrbeam-Nonce:     <32 hex chars>
+     X-Orrbeam-Signature: <key_id>:<base64_sig>
+     X-Orrbeam-Version:   orrbeam/1
+5. Send over TLS (pinned cert)
+                                          6. TLS terminates; cert is the
+                                             node's own self-signed cert
+                                          7. Extract timestamp — reject if
+                                             |now - timestamp| > 30 s
+                                          8. Check nonce cache — reject if
+                                             nonce seen before (replay)
+                                          9. Insert nonce into cache (TTL 60 s)
+                                         10. Resolve key_id → TrustedPeer
+                                             from TrustedPeerStore
+                                         11. Recompute canonical string
+                                             from request fields
+                                         12. Verify Ed25519 signature with
+                                             peer's stored verifying key
+                                         13. Check peer.permissions for
+                                             the specific operation
+                                         14. Forward to handler or return
+                                             401 with error code
+```
+
+Endpoints that do not require trust (e.g. `GET /v1/hello`, `POST /v1/mutual-trust-request`) skip steps 10–13 and are handled by the open router.
+
 ## Extension Points
 
 ### New Platforms
