@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSunshineStore } from "@/stores/sunshine";
 import type { SunshineSettings } from "@/stores/sunshine";
+import { useSharedControlStore } from "@/stores/sharedControl";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { Button } from "@/components/ui/Button";
 import { PairAcceptDialog } from "./PairAcceptDialog";
@@ -29,7 +30,19 @@ export function SunshinePanel() {
     updateSettings,
   } = useSunshineStore();
 
+  const {
+    enabled: scEnabled,
+    participants,
+    loading: scLoading,
+    error: scError,
+    start: scStart,
+    stop: scStop,
+    addParticipant,
+    removeParticipant,
+  } = useSharedControlStore();
+
   const [pairOpen, setPairOpen] = useState(false);
+  const [newParticipant, setNewParticipant] = useState("");
 
   const isRunning = status?.status === "running";
   const isInstalled = status?.status !== "not_installed";
@@ -118,6 +131,106 @@ export function SunshinePanel() {
           <Button variant="sunshine" onClick={start} disabled={loading} className="w-full">
             {loading ? "Starting..." : "Start Hosting"}
           </Button>
+        )}
+      </div>
+
+      {/* Shared Control */}
+      <div className="mt-4 pt-4 border-t border-neutral-800">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-medium text-neutral-400 uppercase tracking-wider">
+            Control Mode
+          </span>
+          {/* Solo / Shared-control pill toggle */}
+          <div className="flex items-center rounded-full bg-surface-2 border border-neutral-700 p-0.5 gap-0.5">
+            <button
+              onClick={() => { if (scEnabled) scStop(); }}
+              disabled={scLoading || !scEnabled}
+              className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors ${
+                !scEnabled
+                  ? "bg-neutral-600 text-neutral-100 shadow-sm"
+                  : "text-neutral-500 hover:text-neutral-300"
+              }`}
+            >
+              Solo
+            </button>
+            <button
+              onClick={() => { if (!scEnabled) scStart(); }}
+              disabled={scLoading || scEnabled}
+              className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors ${
+                scEnabled
+                  ? "bg-sunshine/80 text-neutral-900 shadow-sm"
+                  : "text-neutral-500 hover:text-neutral-300"
+              }`}
+            >
+              Shared
+            </button>
+          </div>
+        </div>
+
+        {scEnabled && (
+          <div className="space-y-2">
+            {/* Participant list */}
+            {participants.length > 0 && (
+              <div className="space-y-1">
+                {participants.map((name) => (
+                  <div
+                    key={name}
+                    className="flex items-center justify-between bg-surface-2 rounded px-2.5 py-1.5"
+                  >
+                    <span className="text-xs text-neutral-200 font-mono">{name}</span>
+                    <button
+                      onClick={() => removeParticipant(name)}
+                      disabled={scLoading}
+                      className="text-[10px] text-neutral-500 hover:text-red-400 transition-colors disabled:opacity-50"
+                    >
+                      remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {participants.length === 0 && (
+              <p className="text-[11px] text-neutral-600">No participants yet.</p>
+            )}
+
+            {/* Add participant input */}
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={newParticipant}
+                onChange={(e) => setNewParticipant(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newParticipant.trim()) {
+                    addParticipant(newParticipant.trim());
+                    setNewParticipant("");
+                  }
+                }}
+                placeholder="Participant name"
+                maxLength={64}
+                className="flex-1 bg-surface-2 text-neutral-200 text-xs rounded px-2 py-1 border border-transparent focus:border-neutral-600 focus:outline-none placeholder-neutral-600"
+              />
+              <button
+                onClick={() => {
+                  if (newParticipant.trim()) {
+                    addParticipant(newParticipant.trim());
+                    setNewParticipant("");
+                  }
+                }}
+                disabled={scLoading || !newParticipant.trim()}
+                className="text-xs text-sunshine hover:text-sunshine-bright disabled:text-neutral-600 disabled:cursor-not-allowed transition-colors px-2"
+              >
+                Add
+              </button>
+            </div>
+
+            {/* Shared control error */}
+            {scError && (
+              <div className="text-[11px] text-red-400 bg-red-500/10 rounded px-2 py-1">
+                {scError}
+              </div>
+            )}
+          </div>
         )}
       </div>
 

@@ -189,6 +189,15 @@ const mocks: Record<string, unknown> = {
   ],
 
   connect_to_peer: null,
+
+  // ── Shared control (INS-002) ─────────────────────────────────────────────
+
+  start_shared_control: null,
+  stop_shared_control: null,
+  add_sc_participant: 0,
+  remove_sc_participant: null,
+  list_sc_participants: [] as string[],
+
   remote_peer_status: {
     sunshine: { status: "running" },
     moonlight: { status: "installed" },
