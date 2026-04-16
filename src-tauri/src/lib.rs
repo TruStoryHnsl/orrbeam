@@ -258,15 +258,20 @@ pub fn run() {
                     .expect("invalid api_bind:api_port in config")
             };
 
-            // Spawn the nonce GC task.
-            control_state
-                .nonces
-                .clone()
-                .spawn_gc(app_state.control_shutdown.clone());
-
-            // Spawn the control server in the Tauri async runtime.
+            // Spawn the control server (and its nonce GC task) in the Tauri
+            // async runtime.
+            //
+            // NOTE: `NonceCache::spawn_gc` uses bare `tokio::spawn`, which
+            // requires a Tokio runtime in thread-local context. Tauri's
+            // `.setup()` closure runs on the main thread *without* that
+            // context, so calling `spawn_gc` here directly panics with
+            // "there is no reactor running". We therefore spawn the GC from
+            // inside the async block below, where the runtime context is
+            // guaranteed to be active.
             let server_state = control_state;
+            let gc_shutdown = app_state.control_shutdown.clone();
             tauri::async_runtime::spawn(async move {
+                server_state.nonces.clone().spawn_gc(gc_shutdown);
                 tracing::info!(%bind_addr, "control server starting");
                 if let Err(e) = orrbeam_net::server::serve(server_state, bind_addr).await {
                     tracing::error!("control server exited: {e}");
