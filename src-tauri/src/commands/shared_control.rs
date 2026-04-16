@@ -34,7 +34,7 @@ pub async fn start_shared_control(state: State<'_, AppState>) -> Result<(), AppE
         use orrbeam_platform::shared_control::LinuxSharedControlSession;
         *guard = Some(Box::new(LinuxSharedControlSession::new()));
         tracing::info!("shared-control session started (Linux/uinput)");
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(target_os = "linux"))]
