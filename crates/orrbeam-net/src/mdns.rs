@@ -1,3 +1,5 @@
+//! LAN node discovery and registration via `_orrbeam._tcp` mDNS.
+
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use orrbeam_core::node::{DiscoverySource, Node, NodeRegistry, NodeState};
 use std::sync::Arc;

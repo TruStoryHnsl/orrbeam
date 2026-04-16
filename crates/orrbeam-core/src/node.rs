@@ -1,3 +1,5 @@
+//! Mesh node types and the in-memory node registry.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -8,34 +10,52 @@ use thiserror::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NodeState {
+    /// Node is reachable and not currently streaming.
     Online,
+    /// Node is not reachable or has not been seen recently.
     Offline,
+    /// Node is hosting a stream (Sunshine is active and a client is connected).
     Hosting,
+    /// This node is connected to a remote stream (Moonlight is active).
     Connected,
 }
 
-/// Discovery source for a node.
+/// How a node was discovered and added to the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DiscoverySource {
+    /// Discovered via LAN mDNS (`_orrbeam._tcp`).
     Mdns,
+    /// Discovered via the orrtellite (Headscale) mesh API.
     Orrtellite,
+    /// Manually configured in `config.yaml` as a static node.
     Static,
 }
 
 /// A node in the orrbeam mesh.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Node {
+    /// Human-readable node name.
     pub name: String,
+    /// IP address of the node's control-plane interface.
     pub address: IpAddr,
+    /// TCP port of the node's control-plane HTTPS server.
     pub port: u16,
+    /// Current reachability and streaming state.
     pub state: NodeState,
+    /// How this node was discovered.
     pub source: DiscoverySource,
+    /// Ed25519 fingerprint of the node (first 16 hex chars of public key).
     pub fingerprint: Option<String>,
+    /// Whether Sunshine (remote-desktop host) is available on this node.
     pub sunshine_available: bool,
+    /// Whether Moonlight (remote-desktop client) is available on this node.
     pub moonlight_available: bool,
+    /// Operating system identifier (e.g. `"linux"`, `"macos"`, `"windows"`).
     pub os: Option<String>,
+    /// Hardware encoder name if known (e.g. `"nvenc"`, `"videotoolbox"`).
     pub encoder: Option<String>,
+    /// SHA-256 fingerprint of the node's TLS certificate (hex).
     #[serde(default)]
     pub cert_sha256: Option<String>,
     /// Timestamp of the last time this node was seen via discovery.
@@ -43,10 +63,13 @@ pub struct Node {
     pub last_seen: Option<time::OffsetDateTime>,
 }
 
+/// Errors that can occur while loading or saving the node registry.
 #[derive(Debug, Error)]
 pub enum NodeRegistryError {
+    /// An I/O error while reading or writing the registry file.
     #[error("failed to read node registry: {0}")]
     Read(#[from] std::io::Error),
+    /// The registry file could not be parsed as valid YAML.
     #[error("failed to parse node registry: {0}")]
     Parse(#[from] serde_yaml::Error),
 }
@@ -62,6 +85,7 @@ pub struct NodeRegistry {
 }
 
 impl NodeRegistry {
+    /// Create a new empty registry.
     pub fn new() -> Self {
         Self::default()
     }

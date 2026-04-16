@@ -1,11 +1,16 @@
+//! Application configuration for orrbeam.
+
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use thiserror::Error;
 
+/// Errors that can occur when loading or saving the configuration file.
 #[derive(Error, Debug)]
 pub enum ConfigError {
+    /// An I/O error while reading or writing the config file.
     #[error("failed to read config: {0}")]
     Read(#[from] std::io::Error),
+    /// The config file could not be parsed as valid YAML.
     #[error("failed to parse config: {0}")]
     Parse(#[from] serde_yaml::Error),
 }
@@ -13,7 +18,9 @@ pub enum ConfigError {
 /// Static node entry for manual configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StaticNode {
+    /// Human-readable node name.
     pub name: String,
+    /// IP address or hostname of the node.
     pub address: String,
 }
 
@@ -21,16 +28,27 @@ pub struct StaticNode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
+    /// Human-readable name for this node (defaults to the system hostname).
     pub node_name: String,
+    /// Master switch for all discovery backends.
     pub discovery_enabled: bool,
+    /// Enable LAN mDNS (`_orrbeam._tcp`) discovery.
     pub mdns_enabled: bool,
+    /// Enable orrtellite (Headscale) mesh discovery.
     pub orrtellite_enabled: bool,
+    /// Base URL of the Headscale server (e.g. `https://hs.example.com`).
     pub orrtellite_url: String,
+    /// Headscale API key for authenticating with orrtellite.
     pub orrtellite_api_key: String,
+    /// Explicit path to the Sunshine binary (uses PATH lookup if `None`).
     pub sunshine_path: Option<String>,
+    /// Sunshine web-UI username for PIN submission.
     pub sunshine_username: String,
+    /// Sunshine web-UI password for PIN submission.
     pub sunshine_password: String,
+    /// Explicit path to the Moonlight binary (uses PATH lookup if `None`).
     pub moonlight_path: Option<String>,
+    /// Statically configured nodes that don't require discovery.
     pub static_nodes: Vec<StaticNode>,
     /// Address the control-plane HTTPS server binds to.
     pub api_bind: String,
