@@ -503,6 +503,87 @@ pub async fn pair_accept(
     Ok(Json(PairAcceptResponse { accepted: true }))
 }
 
+// ---------------------------------------------------------------------------
+// Shared-control types
+// ---------------------------------------------------------------------------
+
+/// Request body for `POST /v1/shared-control/join`.
+#[derive(Debug, Deserialize)]
+pub struct SharedControlJoinBody {
+    /// Display name of the joining participant (1–64 characters).
+    pub participant_name: String,
+    /// Requested slot index (0–3); the actual assigned slot may differ.
+    pub slot_index: u8,
+}
+
+/// Response body for `POST /v1/shared-control/join`.
+#[derive(Debug, Serialize)]
+pub struct SharedControlJoinResponse {
+    /// The slot index actually assigned by the host.
+    pub slot_index: u8,
+    /// Best-effort path to the virtual input device on the host (Linux only).
+    pub device_path: String,
+}
+
+/// `POST /v1/shared-control/join` — add a remote participant to the active shared-control session.
+///
+/// Requires: `can_start_sunshine` permission (reuses the existing bit).
+/// The host must have an active shared-control session (started via the Tauri
+/// `start_shared_control` command). Returns 503 if no session is active.
+pub async fn shared_control_join(
+    State(state): State<Arc<ControlState>>,
+    Extension(peer_ctx): Extension<PeerContext>,
+    Json(body): Json<SharedControlJoinBody>,
+) -> Result<Json<SharedControlJoinResponse>, ControlError> {
+    if !peer_ctx.peer.permissions.can_start_sunshine {
+        return Err(ControlError::Forbidden(
+            "peer lacks can_start_sunshine permission".into(),
+        ));
+    }
+
+    // Validate inputs (commercial scope: slot 0–3, name 1–64 chars).
+    if body.participant_name.is_empty() || body.participant_name.len() > 64 {
+        return Err(ControlError::InvalidBody(
+            "participant_name must be 1–64 characters".into(),
+        ));
+    }
+    if body.slot_index > 3 {
+        return Err(ControlError::InvalidBody(
+            "slot_index must be 0–3".into(),
+        ));
+    }
+
+    let assigned_slot = {
+        let mut guard = state.shared_control.lock().map_err(|_| {
+            ControlError::Internal("shared_control lock poisoned".into())
+        })?;
+        let session = guard.as_mut().ok_or(ControlError::SharedControlUnavailable)?;
+        session
+            .add_participant(body.participant_name.clone())
+            .map_err(|e| {
+                ControlError::ServiceUnavailable(format!("add_participant failed: {e}"))
+            })?
+    };
+
+    // Touch last_seen for the requesting peer.
+    {
+        let mut store = state.peers.write().await;
+        store.touch_last_seen(&peer_ctx.peer.name);
+    }
+
+    tracing::info!(
+        peer = %peer_ctx.peer.name,
+        participant = %body.participant_name,
+        assigned_slot,
+        "shared-control participant joined"
+    );
+
+    Ok(Json(SharedControlJoinResponse {
+        slot_index: assigned_slot,
+        device_path: format!("/dev/input/event{assigned_slot}"),
+    }))
+}
+
 /// `GET /v1/peers` — list trusted peers (sanitized, no raw keys).
 ///
 /// Requires: `can_list_peers`.

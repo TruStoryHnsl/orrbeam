@@ -8,7 +8,7 @@ use orrbeam_core::{Config, Identity, NodeRegistry};
 use orrbeam_net::DiscoveryManager;
 use orrbeam_platform::get_platform;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
@@ -27,6 +27,12 @@ pub struct AppState {
     /// the server's inbound-request handlers and the Tauri command layer both
     /// read/write the same map.
     pub pending_mutual_trust: Arc<RwLock<std::collections::HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>>,
+    /// Active shared-control session, if any.
+    ///
+    /// This `Arc` is shared with [`orrbeam_net::server::ControlState`] so that
+    /// the HTTP control server's join endpoint and the Tauri command layer both
+    /// operate on the same live session.
+    pub shared_control: Arc<Mutex<Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>>>,
     pub control_shutdown: CancellationToken,
 }
 
@@ -128,6 +134,11 @@ pub fn run() {
     let platform = get_platform();
     let config_arc = Arc::new(RwLock::new(config.clone()));
 
+    // Shared-control session — shared between AppState (Tauri commands) and
+    // ControlState (HTTP server join endpoint) via the same Arc.
+    let shared_control: Arc<Mutex<Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>>> =
+        Arc::new(Mutex::new(None));
+
     let state = AppState {
         config: config_arc.clone(),
         identity: identity.clone(),
@@ -136,6 +147,7 @@ pub fn run() {
         tls: tls.clone(),
         peers: peers.clone(),
         pending_mutual_trust: pending_mutual_trust.clone(),
+        shared_control: shared_control.clone(),
         control_shutdown: control_shutdown.clone(),
     };
 
@@ -229,6 +241,11 @@ pub fn run() {
             commands::settings::save_config,
             commands::settings::get_identity,
             commands::settings::get_tls_fingerprint,
+            commands::shared_control::start_shared_control,
+            commands::shared_control::stop_shared_control,
+            commands::shared_control::add_sc_participant,
+            commands::shared_control::remove_sc_participant,
+            commands::shared_control::list_sc_participants,
         ])
         .setup(|app| {
             let app_state = app.state::<AppState>();
@@ -249,6 +266,7 @@ pub fn run() {
                 nonces: orrbeam_net::server::NonceCache::new(),
                 pending_mutual_trust: app_state.pending_mutual_trust.clone(),
                 platform: app_state.platform.clone(),
+                shared_control: app_state.shared_control.clone(),
                 event_emitter: emitter,
                 shutdown: app_state.control_shutdown.clone(),
                 ip_tofu_attempts: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
