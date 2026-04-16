@@ -1,13 +1,18 @@
+//! Ed25519 node identity for mesh authentication.
+
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use thiserror::Error;
 
+/// Errors that can occur when loading or generating an [`Identity`].
 #[derive(Error, Debug)]
 pub enum IdentityError {
+    /// An I/O error while reading or writing the signing key file.
     #[error("failed to read identity: {0}")]
     Io(#[from] std::io::Error),
+    /// The stored key bytes could not be decoded as a valid Ed25519 signing key.
     #[error("invalid key data")]
     InvalidKey,
 }
@@ -18,10 +23,12 @@ pub struct Identity {
     signing_key: SigningKey,
 }
 
-/// Serializable public identity info.
+/// Serializable public identity info for sharing over the wire.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicIdentity {
+    /// Human-readable fingerprint (first 16 hex chars of the Ed25519 public key).
     pub fingerprint: String,
+    /// Raw 32-byte Ed25519 public key bytes.
     pub public_key: Vec<u8>,
 }
 

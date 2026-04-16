@@ -1,12 +1,17 @@
+//! Read/write helper for the Sunshine `sunshine.conf` configuration file.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use thiserror::Error;
 
+/// Errors that can occur when reading or writing `sunshine.conf`.
 #[derive(Error, Debug)]
 pub enum SunshineConfError {
+    /// An I/O error while reading or writing the config file.
     #[error("failed to read sunshine.conf: {0}")]
     Read(#[from] std::io::Error),
+    /// The `sunshine.conf` file does not exist at the expected path.
     #[error("sunshine.conf not found")]
     NotFound,
 }
@@ -14,11 +19,17 @@ pub enum SunshineConfError {
 /// Sunshine streaming settings exposed in the UI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SunshineSettings {
+    /// Display output name (e.g. `"DP-1"`, `"HDMI-1"`).
     pub output_name: Option<String>,
+    /// Target frame rate in frames per second.
     pub fps: Option<u32>,
+    /// Target bitrate in kilobits per second.
     pub bitrate: Option<u32>,
+    /// Hardware encoder to use (e.g. `"nvenc"`, `"vaapi"`, `"videotoolbox"`).
     pub encoder: Option<String>,
+    /// Video codec (e.g. `"h264"`, `"h265"`, `"av1"`).
     pub codec: Option<String>,
+    /// Number of audio channels.
     pub channels: Option<u32>,
 }
 
