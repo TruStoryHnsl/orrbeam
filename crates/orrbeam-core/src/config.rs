@@ -64,6 +64,16 @@ pub struct Config {
     /// Capped by the platform implementation; on Linux this is limited by
     /// available uinput device slots. Defaults to `2`.
     pub max_participants: u8,
+    /// Milliseconds after which an idle participant's input stream times out.
+    ///
+    /// Set to `0` to disable the timeout. Defaults to `5000` (5 seconds).
+    pub input_timeout_ms: u32,
+    /// Strategy for resolving simultaneous key-press conflicts between participants.
+    ///
+    /// - `"last_wins"` (default): the most-recently-active participant's event wins.
+    /// - `"first_wins"`: the first participant to press a key holds it until release.
+    /// - `"merge"`: all participant events are forwarded (suitable for co-op input).
+    pub input_conflict_strategy: String,
 }
 
 impl Default for Config {
@@ -84,6 +94,8 @@ impl Default for Config {
             api_port: 47782,
             shared_control_enabled: false,
             max_participants: 2,
+            input_timeout_ms: 5000,
+            input_conflict_strategy: "last_wins".to_string(),
         }
     }
 }
