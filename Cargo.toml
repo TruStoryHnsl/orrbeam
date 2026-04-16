@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/orrbeam-core", "crates/orrbeam-net", "crates/orrbeam-platform", "src-tauri"]
+members = ["crates/orrbeam-core", "crates/orrbeam-net", "crates/orrbeam-platform", "src-tauri", "tests/e2e"]
 resolver = "2"
 
 [workspace.package]
