@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useMoonlightStore } from "@/stores/moonlight";
 import type { MoonlightNode } from "@/stores/moonlight";
+import { usePeersStore } from "@/stores/peers";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { Button } from "@/components/ui/Button";
 import { PairInitiateDialog } from "./PairDialog";
+import { PeeringProgressModal } from "./PeeringProgressModal";
 
 const RESOLUTION_OPTIONS = [
   { label: "720p", value: "1280x720" },
@@ -14,12 +16,34 @@ const RESOLUTION_OPTIONS = [
 
 export function MoonlightPanel() {
   const { status, nodes, connectedTo, loading, error, connect, disconnect } = useMoonlightStore();
+  const peers = usePeersStore((s) => s.peers);
+  const connectTo = usePeersStore((s) => s.connectTo);
 
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [windowed, setWindowed] = useState(false);
   const [resolution, setResolution] = useState("1920x1080");
   const [app, setApp] = useState("Desktop");
   const [pairTarget, setPairTarget] = useState<{ address: string; name: string } | null>(null);
+
+  // Remote connect (control plane)
+  const [remoteTarget, setRemoteTarget] = useState<string | null>(null);
+  const [peeringOpen, setPeeringOpen] = useState(false);
+
+  /** Returns the trusted peer name that matches this node (by Ed25519 fingerprint or node name), if any. */
+  const getTrustedPeerName = (node: MoonlightNode): string | null => {
+    const match = peers.find(
+      (p) =>
+        (node.fingerprint && p.ed25519_fingerprint === node.fingerprint) ||
+        p.name === node.name
+    );
+    return match?.name ?? null;
+  };
+
+  const handleConnectRemote = (peerName: string) => {
+    connectTo(peerName).catch(() => {});
+    setRemoteTarget(peerName);
+    setPeeringOpen(true);
+  };
 
   const isInstalled = status?.status !== "not_installed";
   const onlineNodes = nodes.filter((n) => n.state !== "offline");
@@ -129,16 +153,21 @@ export function MoonlightPanel() {
         )}
 
         <div className="space-y-1.5">
-          {onlineNodes.map((node) => (
-            <NodeCard
-              key={node.name}
-              node={node}
-              isSelected={selectedNode === node.address}
-              isConnected={connectedTo === node.address}
-              disabled={loading || !isInstalled || !!connectedTo}
-              onSelect={() => setSelectedNode(node.address)}
-            />
-          ))}
+          {onlineNodes.map((node) => {
+            const trustedPeerName = getTrustedPeerName(node);
+            return (
+              <NodeCard
+                key={node.name}
+                node={node}
+                isSelected={selectedNode === node.address}
+                isConnected={connectedTo === node.address}
+                disabled={loading || !isInstalled || !!connectedTo}
+                onSelect={() => setSelectedNode(node.address)}
+                trustedPeerName={trustedPeerName}
+                onConnectRemote={trustedPeerName ? () => handleConnectRemote(trustedPeerName) : undefined}
+              />
+            );
+          })}
         </div>
 
         {offlineNodes.length > 0 && (
@@ -213,6 +242,13 @@ export function MoonlightPanel() {
           nodeName={pairTarget.name}
         />
       )}
+
+      {/* Peering progress modal (remote connect) */}
+      <PeeringProgressModal
+        open={peeringOpen}
+        peerName={remoteTarget ?? ""}
+        onClose={() => setPeeringOpen(false)}
+      />
     </div>
   );
 }
@@ -223,43 +259,73 @@ function NodeCard({
   isConnected,
   disabled,
   onSelect,
+  trustedPeerName,
+  onConnectRemote,
 }: {
   node: MoonlightNode;
   isSelected: boolean;
   isConnected: boolean;
   disabled: boolean;
   onSelect: () => void;
+  trustedPeerName?: string | null;
+  onConnectRemote?: () => void;
 }) {
   return (
-    <button
-      onClick={onSelect}
-      disabled={disabled}
-      className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left transition-colors ${
+    <div
+      className={`w-full rounded-lg border transition-colors ${
         isSelected
-          ? "bg-moonlight/10 border border-moonlight/30"
+          ? "bg-moonlight/10 border-moonlight/30"
           : isConnected
-            ? "bg-moonlight/15 border border-moonlight/40"
-            : "bg-surface-2 border border-transparent hover:bg-surface-3"
-      } disabled:cursor-not-allowed`}
+            ? "bg-moonlight/15 border-moonlight/40"
+            : "bg-surface-2 border-transparent hover:bg-surface-3"
+      }`}
     >
-      <div className="flex items-center gap-2">
-        <StatusDot status={node.state as "online" | "offline" | "hosting" | "connected"} />
-        <div>
-          <div className="text-sm text-neutral-200 font-medium">{node.name}</div>
-          <div className="flex items-center gap-2 text-[10px] text-neutral-500">
-            {node.os && <span>{node.os}</span>}
-            {node.encoder && <span>{node.encoder}</span>}
-            <span>{node.source}</span>
+      <button
+        onClick={onSelect}
+        disabled={disabled}
+        className="w-full flex items-center justify-between px-3 py-2 text-left disabled:cursor-not-allowed"
+      >
+        <div className="flex items-center gap-2">
+          <StatusDot status={node.state as "online" | "offline" | "hosting" | "connected"} />
+          <div>
+            <div className="text-sm text-neutral-200 font-medium">{node.name}</div>
+            <div className="flex items-center gap-2 text-[10px] text-neutral-500">
+              {node.os && <span>{node.os}</span>}
+              {node.encoder && <span>{node.encoder}</span>}
+              <span>{node.source}</span>
+              {trustedPeerName && (
+                <span className="text-moonlight/70">\u2022 trusted</span>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {isConnected && <span className="text-xs text-moonlight-bright font-medium">Streaming</span>}
-      {isSelected && !isConnected && node.sunshine_available && (
-        <span className="text-[10px] text-moonlight">selected</span>
+        {isConnected && (
+          <span className="text-xs text-moonlight-bright font-medium">Streaming</span>
+        )}
+        {isSelected && !isConnected && node.sunshine_available && (
+          <span className="text-[10px] text-moonlight">selected</span>
+        )}
+        {!node.sunshine_available && (
+          <span className="text-[10px] text-neutral-600">no host</span>
+        )}
+      </button>
+
+      {/* "Connect (remote)" button — only shown for trusted peers */}
+      {trustedPeerName && onConnectRemote && !isConnected && !disabled && (
+        <div className="px-3 pb-2 pt-0">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onConnectRemote();
+            }}
+            className="w-full text-[11px] text-moonlight/80 hover:text-moonlight border border-moonlight/20 hover:border-moonlight/40 rounded px-2 py-1 transition-colors bg-moonlight/5 hover:bg-moonlight/10"
+          >
+            Connect (remote)
+          </button>
+        </div>
       )}
-      {!node.sunshine_available && <span className="text-[10px] text-neutral-600">no host</span>}
-    </button>
+    </div>
   );
 }
 

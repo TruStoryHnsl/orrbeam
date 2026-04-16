@@ -156,3 +156,76 @@ pub fn set_settings(settings: &SunshineSettings) -> Result<(), SunshineConfError
     let updates = settings.to_conf();
     write_conf(&updates)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_settings() -> SunshineSettings {
+        SunshineSettings {
+            output_name: Some("DP-1".to_string()),
+            fps: Some(60),
+            bitrate: Some(20000),
+            encoder: Some("nvenc".to_string()),
+            codec: Some("h265".to_string()),
+            channels: Some(2),
+        }
+    }
+
+    #[test]
+    fn settings_from_conf_parses_known_keys() {
+        let mut conf = HashMap::new();
+        conf.insert("output_name".to_string(), "HDMI-1".to_string());
+        conf.insert("fps".to_string(), "120".to_string());
+        conf.insert("bitrate_in_kbits".to_string(), "50000".to_string());
+        conf.insert("encoder".to_string(), "vaapi".to_string());
+        conf.insert("codec".to_string(), "h264".to_string());
+        conf.insert("channels".to_string(), "2".to_string());
+
+        let s = SunshineSettings::from_conf(&conf);
+        assert_eq!(s.output_name.as_deref(), Some("HDMI-1"));
+        assert_eq!(s.fps, Some(120));
+        assert_eq!(s.bitrate, Some(50000));
+        assert_eq!(s.encoder.as_deref(), Some("vaapi"));
+        assert_eq!(s.codec.as_deref(), Some("h264"));
+        assert_eq!(s.channels, Some(2));
+    }
+
+    #[test]
+    fn settings_from_conf_ignores_unknown_keys() {
+        let mut conf = HashMap::new();
+        conf.insert("unknown_key".to_string(), "value".to_string());
+
+        let s = SunshineSettings::from_conf(&conf);
+        assert!(s.output_name.is_none());
+        assert!(s.fps.is_none());
+    }
+
+    #[test]
+    fn to_conf_roundtrip() {
+        let s = make_settings();
+        let conf = s.to_conf();
+        let recovered = SunshineSettings::from_conf(&conf);
+        assert_eq!(recovered.output_name, s.output_name);
+        assert_eq!(recovered.fps, s.fps);
+        assert_eq!(recovered.bitrate, s.bitrate);
+        assert_eq!(recovered.encoder, s.encoder);
+        assert_eq!(recovered.codec, s.codec);
+        assert_eq!(recovered.channels, s.channels);
+    }
+
+    #[test]
+    fn to_conf_omits_none_fields() {
+        let s = SunshineSettings {
+            output_name: None,
+            fps: Some(30),
+            bitrate: None,
+            encoder: None,
+            codec: None,
+            channels: None,
+        };
+        let conf = s.to_conf();
+        assert!(!conf.contains_key("output_name"), "none fields must not appear");
+        assert!(conf.contains_key("fps"));
+    }
+}

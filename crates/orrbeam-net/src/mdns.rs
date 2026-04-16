@@ -46,6 +46,7 @@ pub async fn browse(registry: Arc<RwLock<NodeRegistry>>) -> Result<(), crate::Di
                             cert_sha256: info
                                 .get_property_val_str("cert_sha256")
                                 .map(String::from),
+                            last_seen: None,
                         };
 
                         let reg = registry.clone();

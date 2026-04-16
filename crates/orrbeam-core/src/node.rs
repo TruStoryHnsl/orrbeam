@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::path::PathBuf;
+use thiserror::Error;
 
 /// Current state of a node in the mesh.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,9 +38,24 @@ pub struct Node {
     pub encoder: Option<String>,
     #[serde(default)]
     pub cert_sha256: Option<String>,
+    /// Timestamp of the last time this node was seen via discovery.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub last_seen: Option<time::OffsetDateTime>,
+}
+
+#[derive(Debug, Error)]
+pub enum NodeRegistryError {
+    #[error("failed to read node registry: {0}")]
+    Read(#[from] std::io::Error),
+    #[error("failed to parse node registry: {0}")]
+    Parse(#[from] serde_yaml::Error),
 }
 
 /// Registry of all known nodes.
+///
+/// Nodes are keyed by name. The registry can be persisted to
+/// `~/.config/orrbeam/known_nodes.yaml` so that previously-seen nodes
+/// survive application restarts, even when they are currently offline.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct NodeRegistry {
     nodes: HashMap<String, Node>,
@@ -49,8 +66,9 @@ impl NodeRegistry {
         Self::default()
     }
 
-    /// Insert or update a node.
-    pub fn upsert(&mut self, node: Node) {
+    /// Insert or update a node and stamp `last_seen` with the current UTC time.
+    pub fn upsert(&mut self, mut node: Node) {
+        node.last_seen = Some(time::OffsetDateTime::now_utc());
         self.nodes.insert(node.name.clone(), node);
     }
 
@@ -85,5 +103,132 @@ impl NodeRegistry {
             .values()
             .filter(|n| n.state != NodeState::Offline)
             .count()
+    }
+
+    /// Path to the persistent node registry file.
+    pub fn persistence_path() -> PathBuf {
+        let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+        base.join("orrbeam").join("known_nodes.yaml")
+    }
+
+    /// Load the registry from disk.
+    /// Returns an empty registry (not an error) if the file does not exist yet.
+    pub fn load() -> Result<Self, NodeRegistryError> {
+        let path = Self::persistence_path();
+        if path.exists() {
+            let contents = std::fs::read_to_string(&path)?;
+            Ok(serde_yaml::from_str(&contents)?)
+        } else {
+            Ok(Self::default())
+        }
+    }
+
+    /// Save the registry to disk, creating parent directories as needed.
+    pub fn save(&self) -> Result<(), NodeRegistryError> {
+        let path = Self::persistence_path();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let yaml = serde_yaml::to_string(self)?;
+        std::fs::write(&path, yaml)?;
+        Ok(())
+    }
+
+    /// Add a node manually (used by UI). Marks state as `Offline` since reachability
+    /// is unknown until discovery confirms it.
+    pub fn add_manual(&mut self, node: Node) {
+        self.nodes.insert(node.name.clone(), node);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_node(name: &str, online: bool) -> Node {
+        Node {
+            name: name.to_string(),
+            address: "127.0.0.1".parse().unwrap(),
+            port: 47782,
+            state: if online { NodeState::Online } else { NodeState::Offline },
+            source: DiscoverySource::Static,
+            fingerprint: None,
+            sunshine_available: true,
+            moonlight_available: true,
+            os: None,
+            encoder: None,
+            cert_sha256: None,
+            last_seen: None,
+        }
+    }
+
+    #[test]
+    fn upsert_and_get() {
+        let mut reg = NodeRegistry::new();
+        reg.upsert(make_node("alpha", true));
+        let n = reg.get("alpha").expect("alpha present");
+        assert_eq!(n.name, "alpha");
+    }
+
+    #[test]
+    fn upsert_stamps_last_seen() {
+        let mut reg = NodeRegistry::new();
+        reg.upsert(make_node("alpha", true));
+        let n = reg.get("alpha").unwrap();
+        assert!(n.last_seen.is_some(), "upsert must stamp last_seen");
+    }
+
+    #[test]
+    fn remove_cleans_up() {
+        let mut reg = NodeRegistry::new();
+        reg.upsert(make_node("beta", true));
+        assert!(reg.get("beta").is_some());
+        reg.remove("beta");
+        assert!(reg.get("beta").is_none());
+    }
+
+    #[test]
+    fn all_is_sorted_by_name() {
+        let mut reg = NodeRegistry::new();
+        reg.upsert(make_node("zeta", true));
+        reg.upsert(make_node("alpha", true));
+        reg.upsert(make_node("mu", true));
+        let names: Vec<&str> = reg.all().iter().map(|n| n.name.as_str()).collect();
+        assert_eq!(names, ["alpha", "mu", "zeta"]);
+    }
+
+    #[test]
+    fn online_filters_offline() {
+        let mut reg = NodeRegistry::new();
+        reg.upsert(make_node("a", true));
+        reg.upsert(make_node("b", false));
+        let online = reg.online();
+        assert_eq!(online.len(), 1);
+        assert_eq!(online[0].name, "a");
+    }
+
+    #[test]
+    fn online_count_matches_online() {
+        let mut reg = NodeRegistry::new();
+        reg.upsert(make_node("x", true));
+        reg.upsert(make_node("y", false));
+        reg.upsert(make_node("z", true));
+        assert_eq!(reg.online_count(), 2);
+    }
+
+    #[test]
+    fn save_load_roundtrip() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("known_nodes.yaml");
+
+        let mut reg = NodeRegistry::new();
+        reg.upsert(make_node("persist-me", true));
+
+        let yaml = serde_yaml::to_string(&reg).unwrap();
+        std::fs::write(&path, &yaml).unwrap();
+
+        let contents = std::fs::read_to_string(&path).unwrap();
+        let loaded: NodeRegistry = serde_yaml::from_str(&contents).unwrap();
+        assert!(loaded.get("persist-me").is_some());
     }
 }

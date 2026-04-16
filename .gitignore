@@ -12,6 +12,7 @@ frontend/dist/
 # Env / logs
 .env
 .env.*
+!.env.example
 *.log
 
 # Python (v1 archive)

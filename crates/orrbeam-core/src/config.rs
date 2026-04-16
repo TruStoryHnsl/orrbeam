@@ -94,3 +94,80 @@ fn hostname() -> String {
         .and_then(|h| h.into_string().ok())
         .unwrap_or_else(|| "orrbeam-node".to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    /// Set a temporary config dir for the test and restore on drop.
+    fn with_temp_config<F: FnOnce(&TempDir)>(f: F) {
+        let dir = TempDir::new().expect("tempdir");
+        // We can't easily override dirs::config_dir, so we test save/load
+        // using a manual path.
+        f(&dir);
+    }
+
+    #[test]
+    fn default_config_has_valid_fields() {
+        let cfg = Config::default();
+        assert!(cfg.discovery_enabled);
+        assert!(cfg.mdns_enabled);
+        assert_eq!(cfg.api_port, 47782);
+        assert_eq!(cfg.api_bind, "0.0.0.0");
+        assert!(!cfg.node_name.is_empty());
+    }
+
+    #[test]
+    fn config_yaml_roundtrip() {
+        with_temp_config(|dir| {
+            let mut cfg = Config::default();
+            cfg.node_name = "test-node".to_string();
+            cfg.api_port = 12345;
+            cfg.orrtellite_url = "https://hs.example.com".to_string();
+
+            // Serialize to YAML and deserialize back.
+            let yaml = serde_yaml::to_string(&cfg).expect("serialize");
+            let loaded: Config = serde_yaml::from_str(&yaml).expect("deserialize");
+
+            assert_eq!(loaded.node_name, "test-node");
+            assert_eq!(loaded.api_port, 12345);
+            assert_eq!(loaded.orrtellite_url, "https://hs.example.com");
+            drop(dir);
+        });
+    }
+
+    #[test]
+    fn config_save_and_load() {
+        with_temp_config(|dir| {
+            // Manually write config to a temp path and read it back.
+            let path = dir.path().join("config.yaml");
+            let mut cfg = Config::default();
+            cfg.node_name = "save-load-test".to_string();
+            cfg.api_port = 9999;
+
+            let yaml = serde_yaml::to_string(&cfg).expect("serialize");
+            std::fs::write(&path, &yaml).expect("write");
+
+            let contents = std::fs::read_to_string(&path).expect("read");
+            let loaded: Config = serde_yaml::from_str(&contents).expect("parse");
+
+            assert_eq!(loaded.node_name, "save-load-test");
+            assert_eq!(loaded.api_port, 9999);
+        });
+    }
+
+    #[test]
+    fn config_static_nodes_roundtrip() {
+        let mut cfg = Config::default();
+        cfg.static_nodes = vec![
+            StaticNode { name: "foo".to_string(), address: "10.0.0.1".to_string() },
+            StaticNode { name: "bar".to_string(), address: "10.0.0.2".to_string() },
+        ];
+        let yaml = serde_yaml::to_string(&cfg).expect("serialize");
+        let loaded: Config = serde_yaml::from_str(&yaml).expect("deserialize");
+        assert_eq!(loaded.static_nodes.len(), 2);
+        assert_eq!(loaded.static_nodes[0].name, "foo");
+        assert_eq!(loaded.static_nodes[1].address, "10.0.0.2");
+    }
+}

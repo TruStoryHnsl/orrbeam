@@ -95,3 +95,41 @@ impl Identity {
         base.join("orrbeam").join("identity").join("signing.key")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_produces_unique_keys() {
+        let a = Identity::generate().expect("generate a");
+        let b = Identity::generate().expect("generate b");
+        assert_ne!(a.fingerprint(), b.fingerprint());
+    }
+
+    #[test]
+    fn fingerprint_is_16_hex_chars() {
+        let id = Identity::generate().expect("generate");
+        let fp = id.fingerprint();
+        assert_eq!(fp.len(), 16, "fingerprint must be 16 hex chars");
+        assert!(fp.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn public_identity_matches_fingerprint() {
+        let id = Identity::generate().expect("generate");
+        let pub_id = id.public_identity();
+        assert_eq!(pub_id.fingerprint, id.fingerprint());
+        assert_eq!(pub_id.public_key.len(), 32);
+    }
+
+    #[test]
+    fn signing_key_roundtrip() {
+        let id = Identity::generate().expect("generate");
+        let bytes = id.signing_key().to_bytes();
+        let id2 = Identity {
+            signing_key: SigningKey::from_bytes(&bytes),
+        };
+        assert_eq!(id.fingerprint(), id2.fingerprint());
+    }
+}
