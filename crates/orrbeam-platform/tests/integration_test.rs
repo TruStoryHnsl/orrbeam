@@ -8,10 +8,8 @@
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
-
 use orrbeam_core::config::Config;
-use orrbeam_platform::{Platform, ServiceStatus};
+use orrbeam_platform::ServiceStatus;
 
 // ---------------------------------------------------------------------------
 // Mock binary helper

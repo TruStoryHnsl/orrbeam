@@ -150,11 +150,13 @@ mod tests {
 
     #[test]
     fn config_yaml_roundtrip() {
-        with_temp_config(|dir| {
-            let mut cfg = Config::default();
-            cfg.node_name = "test-node".to_string();
-            cfg.api_port = 12345;
-            cfg.orrtellite_url = "https://hs.example.com".to_string();
+        with_temp_config(|_dir| {
+            let cfg = Config {
+                node_name: "test-node".to_string(),
+                api_port: 12345,
+                orrtellite_url: "https://hs.example.com".to_string(),
+                ..Default::default()
+            };
 
             // Serialize to YAML and deserialize back.
             let yaml = serde_yaml::to_string(&cfg).expect("serialize");
@@ -163,7 +165,6 @@ mod tests {
             assert_eq!(loaded.node_name, "test-node");
             assert_eq!(loaded.api_port, 12345);
             assert_eq!(loaded.orrtellite_url, "https://hs.example.com");
-            drop(dir);
         });
     }
 
@@ -172,9 +173,11 @@ mod tests {
         with_temp_config(|dir| {
             // Manually write config to a temp path and read it back.
             let path = dir.path().join("config.yaml");
-            let mut cfg = Config::default();
-            cfg.node_name = "save-load-test".to_string();
-            cfg.api_port = 9999;
+            let cfg = Config {
+                node_name: "save-load-test".to_string(),
+                api_port: 9999,
+                ..Default::default()
+            };
 
             let yaml = serde_yaml::to_string(&cfg).expect("serialize");
             std::fs::write(&path, &yaml).expect("write");
@@ -189,11 +192,13 @@ mod tests {
 
     #[test]
     fn config_static_nodes_roundtrip() {
-        let mut cfg = Config::default();
-        cfg.static_nodes = vec![
-            StaticNode { name: "foo".to_string(), address: "10.0.0.1".to_string() },
-            StaticNode { name: "bar".to_string(), address: "10.0.0.2".to_string() },
-        ];
+        let cfg = Config {
+            static_nodes: vec![
+                StaticNode { name: "foo".to_string(), address: "10.0.0.1".to_string() },
+                StaticNode { name: "bar".to_string(), address: "10.0.0.2".to_string() },
+            ],
+            ..Default::default()
+        };
         let yaml = serde_yaml::to_string(&cfg).expect("serialize");
         let loaded: Config = serde_yaml::from_str(&yaml).expect("deserialize");
         assert_eq!(loaded.static_nodes.len(), 2);
