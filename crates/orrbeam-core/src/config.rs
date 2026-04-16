@@ -206,8 +206,14 @@ mod tests {
     fn config_static_nodes_roundtrip() {
         let cfg = Config {
             static_nodes: vec![
-                StaticNode { name: "foo".to_string(), address: "10.0.0.1".to_string() },
-                StaticNode { name: "bar".to_string(), address: "10.0.0.2".to_string() },
+                StaticNode {
+                    name: "foo".to_string(),
+                    address: "10.0.0.1".to_string(),
+                },
+                StaticNode {
+                    name: "bar".to_string(),
+                    address: "10.0.0.2".to_string(),
+                },
             ],
             ..Default::default()
         };

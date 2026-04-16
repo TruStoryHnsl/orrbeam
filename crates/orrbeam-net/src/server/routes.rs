@@ -20,13 +20,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::{
-    extract::{ConnectInfo, Extension, Path, State},
     Json,
+    extract::{ConnectInfo, Extension, Path, State},
 };
-use std::net::SocketAddr;
-use base64::engine::general_purpose::STANDARD_NO_PAD;
 use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD_NO_PAD;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use uuid::Uuid;
 
 use orrbeam_core::wire::HelloPayload;
@@ -171,9 +171,7 @@ pub struct PairAcceptBody {
 ///
 /// Always returns 200. No authentication required — this endpoint is used
 /// during the initial TOFU handshake and node discovery.
-pub async fn hello(
-    State(state): State<Arc<ControlState>>,
-) -> Json<HelloPayload> {
+pub async fn hello(State(state): State<Arc<ControlState>>) -> Json<HelloPayload> {
     let config = state.config.read().await;
     let platform_info = state.platform.info();
 
@@ -333,13 +331,15 @@ pub async fn status(
 
     let config = state.config.read().await;
 
-    let sunshine_info = state.platform.sunshine_status(&config).map_err(|e| {
-        ControlError::ServiceUnavailable(format!("sunshine_status failed: {e}"))
-    })?;
+    let sunshine_info = state
+        .platform
+        .sunshine_status(&config)
+        .map_err(|e| ControlError::ServiceUnavailable(format!("sunshine_status failed: {e}")))?;
 
-    let moonlight_info = state.platform.moonlight_status(&config).map_err(|e| {
-        ControlError::ServiceUnavailable(format!("moonlight_status failed: {e}"))
-    })?;
+    let moonlight_info = state
+        .platform
+        .moonlight_status(&config)
+        .map_err(|e| ControlError::ServiceUnavailable(format!("moonlight_status failed: {e}")))?;
 
     // Touch last_seen for the peer.
     {
@@ -548,21 +548,20 @@ pub async fn shared_control_join(
         ));
     }
     if body.slot_index > 3 {
-        return Err(ControlError::InvalidBody(
-            "slot_index must be 0–3".into(),
-        ));
+        return Err(ControlError::InvalidBody("slot_index must be 0–3".into()));
     }
 
     let assigned_slot = {
-        let mut guard = state.shared_control.lock().map_err(|_| {
-            ControlError::Internal("shared_control lock poisoned".into())
-        })?;
-        let session = guard.as_mut().ok_or(ControlError::SharedControlUnavailable)?;
+        let mut guard = state
+            .shared_control
+            .lock()
+            .map_err(|_| ControlError::Internal("shared_control lock poisoned".into()))?;
+        let session = guard
+            .as_mut()
+            .ok_or(ControlError::SharedControlUnavailable)?;
         session
             .add_participant(body.participant_name.clone())
-            .map_err(|e| {
-                ControlError::ServiceUnavailable(format!("add_participant failed: {e}"))
-            })?
+            .map_err(|e| ControlError::ServiceUnavailable(format!("add_participant failed: {e}")))?
     };
 
     // Touch last_seen for the requesting peer.

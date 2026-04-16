@@ -6,8 +6,8 @@
 
 use tauri::State;
 
-use crate::error::AppError;
 use crate::AppState;
+use crate::error::AppError;
 
 // ---------------------------------------------------------------------------
 // start_shared_control
@@ -74,10 +74,7 @@ pub async fn stop_shared_control(state: State<'_, AppState>) -> Result<(), AppEr
 /// Returns the assigned slot index (0-based). `name` must be 1–64 characters.
 /// Returns `AppError::Unsupported` if no session is active.
 #[tauri::command]
-pub async fn add_sc_participant(
-    state: State<'_, AppState>,
-    name: String,
-) -> Result<u8, AppError> {
+pub async fn add_sc_participant(state: State<'_, AppState>, name: String) -> Result<u8, AppError> {
     // Validate input (commercial scope).
     if name.is_empty() || name.len() > 64 {
         return Err(AppError::InvalidInput(

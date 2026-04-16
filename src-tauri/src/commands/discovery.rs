@@ -1,5 +1,5 @@
-use crate::error::AppError;
 use crate::AppState;
+use crate::error::AppError;
 use orrbeam_core::{Node, NodeState};
 use serde::Deserialize;
 use std::net::IpAddr;
@@ -34,15 +34,18 @@ pub async fn add_node(state: State<'_, AppState>, node: AddNodeInput) -> Result<
         return Err(AppError::InvalidInput("node name must not be empty".into()));
     }
     if node.address.trim().is_empty() {
-        return Err(AppError::InvalidInput("node address must not be empty".into()));
+        return Err(AppError::InvalidInput(
+            "node address must not be empty".into(),
+        ));
     }
     if node.port == 0 {
         return Err(AppError::InvalidInput("port must be non-zero".into()));
     }
 
-    let address: IpAddr = node.address.parse().map_err(|_| {
-        AppError::InvalidInput(format!("invalid IP address: {}", node.address))
-    })?;
+    let address: IpAddr = node
+        .address
+        .parse()
+        .map_err(|_| AppError::InvalidInput(format!("invalid IP address: {}", node.address)))?;
 
     let new_node = Node {
         name: node.name.clone(),

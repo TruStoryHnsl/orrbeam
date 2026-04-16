@@ -16,7 +16,7 @@ use tokio_util::sync::CancellationToken;
 use orrbeam_core::config::Config;
 use orrbeam_core::identity::Identity;
 use orrbeam_core::tls::TlsIdentity;
-use orrbeam_net::server::{ControlState, NoopEmitter, NonceCache};
+use orrbeam_net::server::{ControlState, NonceCache, NoopEmitter};
 
 // Serialize tests that mutate XDG_DATA_HOME to avoid env var races.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -41,7 +41,10 @@ impl orrbeam_platform::Platform for StubPlatform {
             hostname: "test-node".into(),
         }
     }
-    fn sunshine_status(&self, _: &Config) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError> {
+    fn sunshine_status(
+        &self,
+        _: &Config,
+    ) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError> {
         Ok(orrbeam_platform::ServiceInfo {
             name: "sunshine".into(),
             status: orrbeam_platform::ServiceStatus::NotInstalled,
@@ -49,7 +52,10 @@ impl orrbeam_platform::Platform for StubPlatform {
             path: None,
         })
     }
-    fn moonlight_status(&self, _: &Config) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError> {
+    fn moonlight_status(
+        &self,
+        _: &Config,
+    ) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError> {
         Ok(orrbeam_platform::ServiceInfo {
             name: "moonlight".into(),
             status: orrbeam_platform::ServiceStatus::NotInstalled,
@@ -57,15 +63,45 @@ impl orrbeam_platform::Platform for StubPlatform {
             path: None,
         })
     }
-    fn start_sunshine(&self, _: &Config) -> Result<(), orrbeam_platform::PlatformError> { Ok(()) }
-    fn stop_sunshine(&self) -> Result<(), orrbeam_platform::PlatformError> { Ok(()) }
-    fn start_moonlight(&self, _: &Config, _: &str, _: &str, _: bool, _: Option<&str>) -> Result<(), orrbeam_platform::PlatformError> { Ok(()) }
-    fn stop_moonlight(&self) -> Result<(), orrbeam_platform::PlatformError> { Ok(()) }
-    fn monitors(&self) -> Result<Vec<orrbeam_platform::MonitorInfo>, orrbeam_platform::PlatformError> { Ok(vec![]) }
-    fn gpu_info(&self) -> Result<orrbeam_platform::GpuInfo, orrbeam_platform::PlatformError> {
-        Ok(orrbeam_platform::GpuInfo { name: "stub".into(), encoder: "stub".into(), driver: None })
+    fn start_sunshine(&self, _: &Config) -> Result<(), orrbeam_platform::PlatformError> {
+        Ok(())
     }
-    fn pair_moonlight(&self, _: &Config, _: &str, _: &str) -> Result<(), orrbeam_platform::PlatformError> { Ok(()) }
+    fn stop_sunshine(&self) -> Result<(), orrbeam_platform::PlatformError> {
+        Ok(())
+    }
+    fn start_moonlight(
+        &self,
+        _: &Config,
+        _: &str,
+        _: &str,
+        _: bool,
+        _: Option<&str>,
+    ) -> Result<(), orrbeam_platform::PlatformError> {
+        Ok(())
+    }
+    fn stop_moonlight(&self) -> Result<(), orrbeam_platform::PlatformError> {
+        Ok(())
+    }
+    fn monitors(
+        &self,
+    ) -> Result<Vec<orrbeam_platform::MonitorInfo>, orrbeam_platform::PlatformError> {
+        Ok(vec![])
+    }
+    fn gpu_info(&self) -> Result<orrbeam_platform::GpuInfo, orrbeam_platform::PlatformError> {
+        Ok(orrbeam_platform::GpuInfo {
+            name: "stub".into(),
+            encoder: "stub".into(),
+            driver: None,
+        })
+    }
+    fn pair_moonlight(
+        &self,
+        _: &Config,
+        _: &str,
+        _: &str,
+    ) -> Result<(), orrbeam_platform::PlatformError> {
+        Ok(())
+    }
 }
 
 /// Spin up a test control server. Returns (addr, shutdown_token).
@@ -95,6 +131,7 @@ async fn spawn_test_server() -> (SocketAddr, CancellationToken, tempfile::TempDi
         pending_mutual_trust: Arc::new(RwLock::new(HashMap::new())),
         ip_tofu_attempts: Arc::new(RwLock::new(HashMap::new())),
         platform: Arc::new(StubPlatform),
+        shared_control: Arc::new(std::sync::Mutex::new(None)),
         event_emitter: Arc::new(NoopEmitter),
         shutdown: shutdown.clone(),
     });
@@ -151,7 +188,10 @@ async fn hello_endpoint_has_required_fields() {
         .expect("parse JSON");
 
     assert!(body.get("node_name").is_some(), "missing node_name");
-    assert!(body.get("ed25519_fingerprint").is_some(), "missing ed25519_fingerprint");
+    assert!(
+        body.get("ed25519_fingerprint").is_some(),
+        "missing ed25519_fingerprint"
+    );
     assert!(body.get("cert_sha256").is_some(), "missing cert_sha256");
     assert!(body.get("control_port").is_some(), "missing control_port");
 

@@ -13,10 +13,10 @@
 use crate::identity::Identity;
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, SanType};
 use rustls::ServerConfig;
-use std::sync::Arc;
 use sha2::{Digest, Sha256};
 use std::net::IpAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, info};
 
@@ -88,10 +88,7 @@ impl TlsIdentity {
             );
             Self::load_from_disk(&cert_path, &key_path)
         } else {
-            info!(
-                node_name,
-                "generating new TLS identity for control plane"
-            );
+            info!(node_name, "generating new TLS identity for control plane");
             Self::generate_and_save(identity, node_name, &cert_path, &key_path)
         }
     }
@@ -107,8 +104,8 @@ impl TlsIdentity {
 
         // Parse the certificate chain.
         let mut cert_reader = BufReader::new(self.cert_pem.as_bytes());
-        let cert_chain: Vec<CertificateDer<'static>> = certs(&mut cert_reader)
-            .collect::<Result<Vec<_>, _>>()?;
+        let cert_chain: Vec<CertificateDer<'static>> =
+            certs(&mut cert_reader).collect::<Result<Vec<_>, _>>()?;
 
         // Parse the private key.
         let mut key_reader = BufReader::new(self.key_pem.as_bytes());
@@ -156,8 +153,8 @@ impl TlsIdentity {
         key_path: &PathBuf,
     ) -> Result<Self, TlsError> {
         use ed25519_dalek::pkcs8::EncodePrivateKey;
-        use rustls::pki_types::PrivatePkcs8KeyDer;
         use rcgen::PKCS_ED25519;
+        use rustls::pki_types::PrivatePkcs8KeyDer;
 
         // Convert the dalek SigningKey to PKCS#8 DER.
         let pkcs8_doc = identity
@@ -260,13 +257,17 @@ impl TlsIdentity {
     /// Path to the control-plane certificate PEM file.
     fn cert_path() -> PathBuf {
         let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-        base.join("orrbeam").join("identity").join("control.cert.pem")
+        base.join("orrbeam")
+            .join("identity")
+            .join("control.cert.pem")
     }
 
     /// Path to the control-plane private key PEM file.
     fn key_path() -> PathBuf {
         let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-        base.join("orrbeam").join("identity").join("control.key.pem")
+        base.join("orrbeam")
+            .join("identity")
+            .join("control.key.pem")
     }
 }
 
@@ -305,11 +306,18 @@ mod tests {
         with_temp_data_dir(&tmp);
 
         let id = make_identity();
-        let tls1 = TlsIdentity::load_or_create(&id, "test-node")
-            .expect("first load_or_create failed");
+        let tls1 =
+            TlsIdentity::load_or_create(&id, "test-node").expect("first load_or_create failed");
 
-        assert!(!tls1.cert_sha256_hex.is_empty(), "fingerprint must not be empty");
-        assert_eq!(tls1.cert_sha256_hex.len(), 64, "SHA-256 hex must be 64 chars");
+        assert!(
+            !tls1.cert_sha256_hex.is_empty(),
+            "fingerprint must not be empty"
+        );
+        assert_eq!(
+            tls1.cert_sha256_hex.len(),
+            64,
+            "SHA-256 hex must be 64 chars"
+        );
 
         // Recompute fingerprint from the DER bytes and verify consistency.
         let recomputed = TlsIdentity::sha256_hex(&tls1.cert_der);
@@ -329,10 +337,8 @@ mod tests {
 
         let id = make_identity();
 
-        let tls1 = TlsIdentity::load_or_create(&id, "idempotent-node")
-            .expect("first call failed");
-        let tls2 = TlsIdentity::load_or_create(&id, "idempotent-node")
-            .expect("second call failed");
+        let tls1 = TlsIdentity::load_or_create(&id, "idempotent-node").expect("first call failed");
+        let tls2 = TlsIdentity::load_or_create(&id, "idempotent-node").expect("second call failed");
 
         assert_eq!(
             tls1.cert_sha256_hex, tls2.cert_sha256_hex,
@@ -353,8 +359,7 @@ mod tests {
         with_temp_data_dir(&tmp);
 
         let id = make_identity();
-        let tls = TlsIdentity::load_or_create(&id, "rustls-node")
-            .expect("load_or_create failed");
+        let tls = TlsIdentity::load_or_create(&id, "rustls-node").expect("load_or_create failed");
 
         let config = tls.rustls_server_config();
         assert!(

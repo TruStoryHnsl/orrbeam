@@ -174,7 +174,11 @@ mod tests {
             name: name.to_string(),
             address: "127.0.0.1".parse().unwrap(),
             port: 47782,
-            state: if online { NodeState::Online } else { NodeState::Offline },
+            state: if online {
+                NodeState::Online
+            } else {
+                NodeState::Offline
+            },
             source: DiscoverySource::Static,
             fingerprint: None,
             sunshine_available: true,

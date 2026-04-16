@@ -1,5 +1,5 @@
-use crate::error::AppError;
 use crate::AppState;
+use crate::error::AppError;
 use orrbeam_core::sunshine_conf::{self, SunshineSettings};
 use orrbeam_platform::ServiceInfo;
 use tauri::State;
@@ -40,7 +40,9 @@ pub async fn set_sunshine_settings(settings: SunshineSettings) -> Result<(), App
 #[tauri::command]
 pub async fn set_sunshine_monitor(monitor: String) -> Result<(), AppError> {
     if monitor.trim().is_empty() {
-        return Err(AppError::InvalidInput("monitor name must not be empty".into()));
+        return Err(AppError::InvalidInput(
+            "monitor name must not be empty".into(),
+        ));
     }
     let mut updates = std::collections::HashMap::new();
     updates.insert("output_name".to_string(), monitor);

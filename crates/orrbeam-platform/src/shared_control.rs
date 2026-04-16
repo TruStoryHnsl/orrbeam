@@ -26,8 +26,8 @@ impl InputEventKind {
     #[cfg(target_os = "linux")]
     pub fn ev_type(self) -> u16 {
         match self {
-            InputEventKind::Syn => 0x00,    // EV_SYN
-            InputEventKind::Key => 0x01,    // EV_KEY
+            InputEventKind::Syn => 0x00,     // EV_SYN
+            InputEventKind::Key => 0x01,     // EV_KEY
             InputEventKind::RelAxis => 0x02, // EV_REL
             InputEventKind::AbsAxis => 0x03, // EV_ABS
         }
@@ -98,7 +98,7 @@ pub trait SharedControlSession: Send + Sync {
 #[cfg(target_os = "linux")]
 mod linux_uinput {
     use super::*;
-    use libc::{c_int, ioctl, open, write, O_NONBLOCK, O_WRONLY};
+    use libc::{O_NONBLOCK, O_WRONLY, c_int, ioctl, open, write};
     use std::ffi::CString;
     use std::os::raw::c_void;
 
@@ -158,7 +158,7 @@ mod linux_uinput {
             name[..len].copy_from_slice(&bytes[..len]);
 
             Self {
-                bustype: 0x03, // BUS_USB
+                bustype: 0x03,   // BUS_USB
                 vendor: 0x045E,  // arbitrary (Microsoft)
                 product: 0x07A5, // arbitrary
                 version: 0x0001,
@@ -211,9 +211,7 @@ mod linux_uinput {
             // SAFETY: ioctl with a valid fd and a well-known request code.
             if unsafe { ioctl(fd, UI_SET_EVBIT, ev) } < 0 {
                 unsafe { libc::close(fd) };
-                return Err(PlatformError::Command(format!(
-                    "UI_SET_EVBIT({ev}) failed"
-                )));
+                return Err(PlatformError::Command(format!("UI_SET_EVBIT({ev}) failed")));
             }
         }
 
@@ -268,7 +266,12 @@ mod linux_uinput {
     }
 
     /// Write a single `input_event` to the uinput fd.
-    pub fn write_input_event(fd: i32, ev_type: u16, code: u16, value: i32) -> Result<(), PlatformError> {
+    pub fn write_input_event(
+        fd: i32,
+        ev_type: u16,
+        code: u16,
+        value: i32,
+    ) -> Result<(), PlatformError> {
         let event = LinuxInputEvent {
             tv_sec: 0,
             tv_usec: 0,
@@ -278,9 +281,7 @@ mod linux_uinput {
         };
         let n = std::mem::size_of::<LinuxInputEvent>();
         // SAFETY: write(2) with a pointer to a fully initialised struct.
-        let written = unsafe {
-            write(fd, &event as *const LinuxInputEvent as *const c_void, n)
-        };
+        let written = unsafe { write(fd, &event as *const LinuxInputEvent as *const c_void, n) };
         if written < 0 || written as usize != n {
             return Err(PlatformError::Command(format!(
                 "write to uinput fd {fd} failed (wrote {written}, expected {n})"
@@ -301,7 +302,9 @@ pub struct LinuxSharedControlSession {
 impl LinuxSharedControlSession {
     /// Create a new empty shared-control session.
     pub fn new() -> Self {
-        Self { participants: Vec::new() }
+        Self {
+            participants: Vec::new(),
+        }
     }
 }
 
@@ -337,7 +340,11 @@ impl SharedControlSession for LinuxSharedControlSession {
     }
 
     fn remove_participant(&mut self, slot_index: u8) -> Result<(), PlatformError> {
-        if let Some(pos) = self.participants.iter().position(|p| p.slot_index == slot_index) {
+        if let Some(pos) = self
+            .participants
+            .iter()
+            .position(|p| p.slot_index == slot_index)
+        {
             let slot = self.participants.remove(pos);
             if let Some(fd) = slot.uinput_fd {
                 linux_uinput::destroy_uinput_device(fd);
@@ -356,9 +363,7 @@ impl SharedControlSession for LinuxSharedControlSession {
             .iter()
             .find(|p| p.name == name)
             .map(|p| p.slot_index)
-            .ok_or_else(|| {
-                PlatformError::Command(format!("no participant named '{name}'"))
-            })?;
+            .ok_or_else(|| PlatformError::Command(format!("no participant named '{name}'")))?;
         self.remove_participant(slot_index)
     }
 
@@ -375,9 +380,9 @@ impl SharedControlSession for LinuxSharedControlSession {
                 PlatformError::Command(format!("no participant at slot {slot_index}"))
             })?;
 
-        let fd = slot.uinput_fd.ok_or_else(|| {
-            PlatformError::Command(format!("slot {slot_index} has no uinput fd"))
-        })?;
+        let fd = slot
+            .uinput_fd
+            .ok_or_else(|| PlatformError::Command(format!("slot {slot_index} has no uinput fd")))?;
 
         let ev_type = event.kind.ev_type();
 
@@ -475,12 +480,12 @@ mod tests {
     #[test]
     fn uinput_constants_are_defined() {
         // These values are fixed by the Linux kernel ABI.
-        assert_eq!(linux_uinput::UI_SET_EVBIT,  0x4004_5564);
+        assert_eq!(linux_uinput::UI_SET_EVBIT, 0x4004_5564);
         assert_eq!(linux_uinput::UI_SET_KEYBIT, 0x4004_5565);
         assert_eq!(linux_uinput::UI_SET_RELBIT, 0x4004_5567);
         assert_eq!(linux_uinput::UI_DEV_CREATE, 0x0000_5501);
         assert_eq!(linux_uinput::UI_DEV_DESTROY, 0x0000_5502);
-        assert_eq!(linux_uinput::UI_DEV_SETUP,  0x405C_5503);
+        assert_eq!(linux_uinput::UI_DEV_SETUP, 0x405C_5503);
     }
 
     #[test]
@@ -518,7 +523,11 @@ mod tests {
             uinput_fd: None,
             slot_index: 0,
         });
-        let event = InputEvent { kind: InputEventKind::Key, code: 30, value: 1 };
+        let event = InputEvent {
+            kind: InputEventKind::Key,
+            code: 30,
+            value: 1,
+        };
         let result = session.route_input(0, event);
         assert!(matches!(result, Err(PlatformError::Command(_))));
     }

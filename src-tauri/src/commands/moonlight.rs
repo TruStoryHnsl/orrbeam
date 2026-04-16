@@ -1,5 +1,5 @@
-use crate::error::AppError;
 use crate::AppState;
+use crate::error::AppError;
 use orrbeam_platform::ServiceInfo;
 use serde::Deserialize;
 use tauri::State;

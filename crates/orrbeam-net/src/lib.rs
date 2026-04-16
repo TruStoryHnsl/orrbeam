@@ -77,7 +77,10 @@ impl DiscoveryManager {
     ///
     /// If `registration` is `Some` and mDNS is enabled, this node will also
     /// advertise itself on the LAN so peers can discover it via mDNS.
-    pub async fn start(&mut self, registration: Option<RegistrationInfo>) -> Result<(), DiscoveryError> {
+    pub async fn start(
+        &mut self,
+        registration: Option<RegistrationInfo>,
+    ) -> Result<(), DiscoveryError> {
         if self.config.mdns_enabled {
             tracing::info!("starting mDNS discovery");
             let registry = self.registry.clone();
@@ -88,7 +91,10 @@ impl DiscoveryManager {
             });
 
             if let Some(ref reg_info) = registration {
-                tracing::info!("registering this node via mDNS as '{}'", self.config.node_name);
+                tracing::info!(
+                    "registering this node via mDNS as '{}'",
+                    self.config.node_name
+                );
                 let daemon = mdns::register(&self.config.node_name, reg_info)?;
                 self._mdns_registration = Some(daemon);
             }
@@ -108,7 +114,8 @@ impl DiscoveryManager {
 
         // Add static nodes
         {
-            let mut reg: tokio::sync::RwLockWriteGuard<'_, NodeRegistry> = self.registry.write().await;
+            let mut reg: tokio::sync::RwLockWriteGuard<'_, NodeRegistry> =
+                self.registry.write().await;
             for entry in &self.config.static_nodes {
                 if let Ok(addr) = entry.address.parse::<IpAddr>() {
                     reg.upsert(Node {

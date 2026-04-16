@@ -6,10 +6,10 @@
 //! Real-hardware tests (actual GPU detection, actual Sunshine/Moonlight) are
 //! marked `#[ignore]` and must be run explicitly with `cargo test -- --ignored`.
 
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use orrbeam_core::config::Config;
 use orrbeam_platform::ServiceStatus;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 
 // ---------------------------------------------------------------------------
 // Mock binary helper
@@ -28,8 +28,7 @@ fn make_mock_bin_dir() -> tempfile::TempDir {
         "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"sunshine 0.99.0-mock\"; fi\nexit 0\n",
     )
     .expect("write sunshine mock");
-    fs::set_permissions(&sunshine, fs::Permissions::from_mode(0o755))
-        .expect("chmod sunshine");
+    fs::set_permissions(&sunshine, fs::Permissions::from_mode(0o755)).expect("chmod sunshine");
 
     // moonlight-qt: same pattern
     let moonlight = dir.path().join("moonlight-qt");
@@ -38,8 +37,7 @@ fn make_mock_bin_dir() -> tempfile::TempDir {
         "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"moonlight-qt 5.0.0-mock\"; fi\nexit 0\n",
     )
     .expect("write moonlight mock");
-    fs::set_permissions(&moonlight, fs::Permissions::from_mode(0o755))
-        .expect("chmod moonlight");
+    fs::set_permissions(&moonlight, fs::Permissions::from_mode(0o755)).expect("chmod moonlight");
 
     dir
 }
@@ -158,7 +156,9 @@ fn real_sunshine_status_installed() {
 fn real_moonlight_status_installed() {
     let platform = orrbeam_platform::get_platform();
     let config = Config::default();
-    let info = platform.moonlight_status(&config).expect("moonlight_status");
+    let info = platform
+        .moonlight_status(&config)
+        .expect("moonlight_status");
     assert!(
         matches!(
             info.status,

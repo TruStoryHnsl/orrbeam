@@ -1,7 +1,7 @@
-use crate::error::AppError;
 use crate::AppState;
-use orrbeam_core::identity::PublicIdentity;
+use crate::error::AppError;
 use orrbeam_core::Config;
+use orrbeam_core::identity::PublicIdentity;
 use serde::Serialize;
 use tauri::State;
 
@@ -12,10 +12,7 @@ pub async fn get_config(state: State<'_, AppState>) -> Result<Config, AppError> 
 }
 
 #[tauri::command]
-pub async fn save_config(
-    state: State<'_, AppState>,
-    config: Config,
-) -> Result<(), AppError> {
+pub async fn save_config(state: State<'_, AppState>, config: Config) -> Result<(), AppError> {
     config.save().map_err(AppError::from)?;
     let mut current = state.config.write().await;
     *current = config;
@@ -39,9 +36,7 @@ pub struct TlsFingerprint {
 }
 
 #[tauri::command]
-pub async fn get_tls_fingerprint(
-    state: State<'_, AppState>,
-) -> Result<TlsFingerprint, AppError> {
+pub async fn get_tls_fingerprint(state: State<'_, AppState>) -> Result<TlsFingerprint, AppError> {
     let config = state.config.read().await;
     let tls = orrbeam_core::tls::TlsIdentity::load_or_create(&state.identity, &config.node_name)
         .map_err(AppError::from)?;

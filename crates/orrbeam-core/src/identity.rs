@@ -38,9 +38,7 @@ impl Identity {
         let path = Self::key_path();
         if path.exists() {
             let bytes = std::fs::read(&path)?;
-            let key_bytes: [u8; 32] = bytes
-                .try_into()
-                .map_err(|_| IdentityError::InvalidKey)?;
+            let key_bytes: [u8; 32] = bytes.try_into().map_err(|_| IdentityError::InvalidKey)?;
             Ok(Self {
                 signing_key: SigningKey::from_bytes(&key_bytes),
             })

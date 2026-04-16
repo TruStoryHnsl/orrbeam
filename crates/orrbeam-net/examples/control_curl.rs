@@ -21,7 +21,7 @@ use reqwest::ClientBuilder;
 
 use orrbeam_core::identity::Identity;
 use orrbeam_core::wire::{
-    sign_request, HEADER_KEY_ID, HEADER_NONCE, HEADER_SIGNATURE, HEADER_TIMESTAMP, HEADER_VERSION,
+    HEADER_KEY_ID, HEADER_NONCE, HEADER_SIGNATURE, HEADER_TIMESTAMP, HEADER_VERSION, sign_request,
 };
 
 #[derive(Parser, Debug)]
@@ -102,7 +102,10 @@ async fn main() {
     // Pretty-print JSON if possible, otherwise raw text.
     if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&body_text) {
         println!("HTTP {status}");
-        println!("{}", serde_json::to_string_pretty(&json_val).unwrap_or(body_text));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json_val).unwrap_or(body_text)
+        );
     } else {
         println!("HTTP {status}");
         println!("{body_text}");

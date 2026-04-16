@@ -1,5 +1,7 @@
-use crate::common::{resolve_binary, stop_tracked, store_child, ChildSlot};
-use crate::{GpuInfo, MonitorInfo, Platform, PlatformError, PlatformInfo, ServiceInfo, ServiceStatus};
+use crate::common::{ChildSlot, resolve_binary, stop_tracked, store_child};
+use crate::{
+    GpuInfo, MonitorInfo, Platform, PlatformError, PlatformInfo, ServiceInfo, ServiceStatus,
+};
 use orrbeam_core::Config;
 use std::process::Command;
 
@@ -190,7 +192,10 @@ impl Platform for WindowsPlatform {
 
     fn gpu_info(&self) -> Result<GpuInfo, PlatformError> {
         // Try nvidia-smi first
-        if let Ok(output) = Self::run("nvidia-smi", &["--query-gpu=name,driver_version", "--format=csv,noheader"]) {
+        if let Ok(output) = Self::run(
+            "nvidia-smi",
+            &["--query-gpu=name,driver_version", "--format=csv,noheader"],
+        ) {
             let parts: Vec<&str> = output.split(", ").collect();
             return Ok(GpuInfo {
                 name: parts.first().unwrap_or(&"NVIDIA GPU").to_string(),

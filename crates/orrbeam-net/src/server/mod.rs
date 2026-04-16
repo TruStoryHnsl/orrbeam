@@ -129,7 +129,11 @@ pub struct ControlState {
     /// Shared with the Tauri `AppState` via the same `Arc` so that Tauri
     /// commands (`start_shared_control`, etc.) and the HTTP server join
     /// endpoint both operate on the same live session.
-    pub shared_control: Arc<Mutex<Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>>>,
+    pub shared_control: Arc<
+        Mutex<
+            Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>,
+        >,
+    >,
     /// Event emitter for forwarding control-plane events to the UI layer.
     pub event_emitter: Arc<dyn EventEmitter>,
     /// Cancellation token; cancel this to initiate a graceful shutdown.
@@ -284,7 +288,8 @@ mod tests {
             fn sunshine_status(
                 &self,
                 _: &orrbeam_core::config::Config,
-            ) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError> {
+            ) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError>
+            {
                 Ok(orrbeam_platform::ServiceInfo {
                     name: "sunshine".into(),
                     status: orrbeam_platform::ServiceStatus::NotInstalled,
@@ -295,7 +300,8 @@ mod tests {
             fn moonlight_status(
                 &self,
                 _: &orrbeam_core::config::Config,
-            ) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError> {
+            ) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError>
+            {
                 Ok(orrbeam_platform::ServiceInfo {
                     name: "moonlight".into(),
                     status: orrbeam_platform::ServiceStatus::NotInstalled,
@@ -327,7 +333,8 @@ mod tests {
             }
             fn monitors(
                 &self,
-            ) -> Result<Vec<orrbeam_platform::MonitorInfo>, orrbeam_platform::PlatformError> {
+            ) -> Result<Vec<orrbeam_platform::MonitorInfo>, orrbeam_platform::PlatformError>
+            {
                 Ok(vec![])
             }
             fn gpu_info(
@@ -349,8 +356,7 @@ mod tests {
             }
         }
 
-        let identity =
-            Arc::new(orrbeam_core::identity::Identity::generate().expect("identity"));
+        let identity = Arc::new(orrbeam_core::identity::Identity::generate().expect("identity"));
 
         // Build a TlsIdentity with a temp dir.
         let tmp = tempfile::TempDir::new().unwrap();
@@ -364,9 +370,7 @@ mod tests {
             identity,
             tls,
             config: Arc::new(RwLock::new(orrbeam_core::config::Config::default())),
-            peers: Arc::new(RwLock::new(
-                orrbeam_core::peers::TrustedPeerStore::default(),
-            )),
+            peers: Arc::new(RwLock::new(orrbeam_core::peers::TrustedPeerStore::default())),
             nonces: NonceCache::new(),
             pending_mutual_trust: Arc::new(RwLock::new(HashMap::new())),
             platform: Arc::new(StubPlatform),

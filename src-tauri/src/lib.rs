@@ -26,13 +26,18 @@ pub struct AppState {
     /// This `Arc` is shared with [`orrbeam_net::server::ControlState`] so that
     /// the server's inbound-request handlers and the Tauri command layer both
     /// read/write the same map.
-    pub pending_mutual_trust: Arc<RwLock<std::collections::HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>>,
+    pub pending_mutual_trust:
+        Arc<RwLock<std::collections::HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>>,
     /// Active shared-control session, if any.
     ///
     /// This `Arc` is shared with [`orrbeam_net::server::ControlState`] so that
     /// the HTTP control server's join endpoint and the Tauri command layer both
     /// operate on the same live session.
-    pub shared_control: Arc<Mutex<Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>>>,
+    pub shared_control: Arc<
+        Mutex<
+            Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>,
+        >,
+    >,
     pub control_shutdown: CancellationToken,
 }
 
@@ -59,8 +64,10 @@ impl orrbeam_net::server::EventEmitter for TauriEventEmitter {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "orrbeam=info,orrbeam_app=info,orrbeam_core=info,orrbeam_net=info,orrbeam_platform=info".into());
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        "orrbeam=info,orrbeam_app=info,orrbeam_core=info,orrbeam_net=info,orrbeam_platform=info"
+            .into()
+    });
 
     // In packaged release builds, also write a rolling log file.
     #[cfg(not(debug_assertions))]
@@ -80,7 +87,11 @@ pub fn run() {
 
         tracing_subscriber::registry()
             .with(env_filter)
-            .with(tracing_subscriber::fmt::layer().json().with_writer(non_blocking))
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .with_writer(non_blocking),
+            )
             .with(tracing_subscriber::fmt::layer().pretty())
             .init();
     }
@@ -96,9 +107,7 @@ pub fn run() {
         Config::default()
     });
 
-    let identity = Arc::new(
-        Identity::load_or_create().expect("failed to initialize identity"),
-    );
+    let identity = Arc::new(Identity::load_or_create().expect("failed to initialize identity"));
     tracing::info!("node identity: {}", identity.fingerprint());
 
     // Load TLS identity (cert derived from Ed25519 key).
@@ -122,22 +131,24 @@ pub fn run() {
     // Shared map for in-flight mutual-trust TOFU requests.  The same Arc is
     // given to both AppState (for Tauri commands) and ControlState (for the
     // HTTP server inbound handler) so they always operate on the same data.
-    let pending_mutual_trust: Arc<RwLock<HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>> =
-        Arc::new(RwLock::new(HashMap::new()));
+    let pending_mutual_trust: Arc<
+        RwLock<HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>,
+    > = Arc::new(RwLock::new(HashMap::new()));
 
-    let registry = Arc::new(RwLock::new(
-        NodeRegistry::load().unwrap_or_else(|e| {
-            tracing::warn!("failed to load node registry, starting fresh: {e}");
-            NodeRegistry::new()
-        }),
-    ));
+    let registry = Arc::new(RwLock::new(NodeRegistry::load().unwrap_or_else(|e| {
+        tracing::warn!("failed to load node registry, starting fresh: {e}");
+        NodeRegistry::new()
+    })));
     let platform = get_platform();
     let config_arc = Arc::new(RwLock::new(config.clone()));
 
     // Shared-control session — shared between AppState (Tauri commands) and
     // ControlState (HTTP server join endpoint) via the same Arc.
-    let shared_control: Arc<Mutex<Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>>> =
-        Arc::new(Mutex::new(None));
+    let shared_control: Arc<
+        Mutex<
+            Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>,
+        >,
+    > = Arc::new(Mutex::new(None));
 
     let state = AppState {
         config: config_arc.clone(),
@@ -269,7 +280,9 @@ pub fn run() {
                 shared_control: app_state.shared_control.clone(),
                 event_emitter: emitter,
                 shutdown: app_state.control_shutdown.clone(),
-                ip_tofu_attempts: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+                ip_tofu_attempts: Arc::new(tokio::sync::RwLock::new(
+                    std::collections::HashMap::new(),
+                )),
             });
 
             // Determine bind address from config.

@@ -236,7 +236,10 @@ mod tests {
             channels: None,
         };
         let conf = s.to_conf();
-        assert!(!conf.contains_key("output_name"), "none fields must not appear");
+        assert!(
+            !conf.contains_key("output_name"),
+            "none fields must not appear"
+        );
         assert!(conf.contains_key("fps"));
     }
 }
