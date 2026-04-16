@@ -40,9 +40,7 @@ export function SunshinePanel() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <span className="text-sunshine text-lg">&#9788;</span>
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-sunshine">
-            Sunshine
-          </h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-sunshine">Sunshine</h2>
           <span className="text-xs text-neutral-500">Host</span>
         </div>
         {status && <StatusDot status={status.status} />}
@@ -82,11 +80,7 @@ export function SunshinePanel() {
                   <span className="flex items-center gap-1.5">
                     {isSelected && <span className="text-sunshine">●</span>}
                     {m.name}
-                    {m.primary && (
-                      <span className="text-[10px] text-neutral-500">
-                        primary
-                      </span>
-                    )}
+                    {m.primary && <span className="text-[10px] text-neutral-500">primary</span>}
                   </span>
                   <span className="text-neutral-500">
                     {m.resolution}
@@ -100,49 +94,28 @@ export function SunshinePanel() {
       )}
 
       {/* Stream settings */}
-      {settings && (
-        <StreamSettings settings={settings} onSave={updateSettings} />
-      )}
+      {settings && <StreamSettings settings={settings} onSave={updateSettings} />}
 
       {/* Error */}
       {error && (
-        <div className="text-xs text-red-400 bg-red-500/10 rounded px-2 py-1.5 mb-3">
-          {error}
-        </div>
+        <div className="text-xs text-red-400 bg-red-500/10 rounded px-2 py-1.5 mb-3">{error}</div>
       )}
 
       {/* Actions */}
       <div className="mt-auto pt-4 space-y-2">
         {!isInstalled ? (
-          <p className="text-xs text-neutral-500">
-            Sunshine is not installed.
-          </p>
+          <p className="text-xs text-neutral-500">Sunshine is not installed.</p>
         ) : isRunning ? (
           <>
-            <Button
-              variant="danger"
-              onClick={stop}
-              disabled={loading}
-              className="w-full"
-            >
+            <Button variant="danger" onClick={stop} disabled={loading} className="w-full">
               {loading ? "Stopping..." : "Stop Hosting"}
             </Button>
-            <Button
-              variant="ghost"
-              onClick={() => setPairOpen(true)}
-              className="w-full"
-              size="sm"
-            >
+            <Button variant="ghost" onClick={() => setPairOpen(true)} className="w-full" size="sm">
               Accept Pairing
             </Button>
           </>
         ) : (
-          <Button
-            variant="sunshine"
-            onClick={start}
-            disabled={loading}
-            className="w-full"
-          >
+          <Button variant="sunshine" onClick={start} disabled={loading} className="w-full">
             {loading ? "Starting..." : "Start Hosting"}
           </Button>
         )}
@@ -258,9 +231,7 @@ function Section({
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider">
-          {title}
-        </h3>
+        <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider">{title}</h3>
         {action}
       </div>
       <div className="space-y-1.5">{children}</div>

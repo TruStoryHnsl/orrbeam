@@ -231,9 +231,7 @@ export type PeeringProgressCallback = (progress: PeeringProgress) => void;
  * In browser mock mode, listens for a custom DOM event on `window` so that
  * dev tooling can dispatch synthetic progress events for testing.
  */
-export async function onPeeringProgress(
-  cb: PeeringProgressCallback
-): Promise<() => void> {
+export async function onPeeringProgress(cb: PeeringProgressCallback): Promise<() => void> {
   if (IS_TAURI) {
     const { listen } = await import("@tauri-apps/api/event");
     const unlisten = await listen<PeeringProgress>("peering:progress", (event) => {

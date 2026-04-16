@@ -1,3 +1,14 @@
+//! Network and discovery layer for the orrbeam mesh.
+//!
+//! This crate provides:
+//! - [`DiscoveryManager`] — orchestrates mDNS and orrtellite node discovery.
+//! - [`client`] — signed HTTPS client for node-to-node control-plane calls.
+//! - [`server`] — axum-based TLS control-plane server with Ed25519 auth middleware.
+//! - [`mdns`] — mDNS browse/register using `_orrbeam._tcp`.
+//! - [`orrtellite`] — Headscale API polling for mesh node discovery.
+
+#![warn(missing_docs)]
+
 pub mod client;
 pub mod mdns;
 pub mod orrtellite;
@@ -10,12 +21,16 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
 
+/// Errors that can occur during node discovery.
 #[derive(Error, Debug)]
 pub enum DiscoveryError {
+    /// An mDNS operation failed.
     #[error("mDNS error: {0}")]
     Mdns(String),
+    /// An orrtellite (Headscale) operation failed.
     #[error("orrtellite error: {0}")]
     Orrtellite(String),
+    /// A network request failed.
     #[error("network error: {0}")]
     Network(#[from] reqwest::Error),
 }
@@ -49,6 +64,7 @@ pub struct DiscoveryManager {
 }
 
 impl DiscoveryManager {
+    /// Create a new [`DiscoveryManager`] bound to `config` and `registry`.
     pub fn new(config: Config, registry: Arc<RwLock<NodeRegistry>>) -> Self {
         Self {
             registry,
@@ -107,6 +123,7 @@ impl DiscoveryManager {
                         os: None,
                         encoder: None,
                         cert_sha256: None,
+                        last_seen: None,
                     });
                 }
             }

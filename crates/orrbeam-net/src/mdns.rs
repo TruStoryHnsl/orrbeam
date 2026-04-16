@@ -1,3 +1,5 @@
+//! LAN node discovery and registration via `_orrbeam._tcp` mDNS.
+
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use orrbeam_core::node::{DiscoverySource, Node, NodeRegistry, NodeState};
 use std::sync::Arc;
@@ -46,6 +48,7 @@ pub async fn browse(registry: Arc<RwLock<NodeRegistry>>) -> Result<(), crate::Di
                             cert_sha256: info
                                 .get_property_val_str("cert_sha256")
                                 .map(String::from),
+                            last_seen: None,
                         };
 
                         let reg = registry.clone();

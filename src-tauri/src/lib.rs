@@ -1,5 +1,8 @@
 mod commands;
+pub mod error;
 mod tray;
+
+pub use error::AppError;
 
 use orrbeam_core::{Config, Identity, NodeRegistry};
 use orrbeam_net::DiscoveryManager;
@@ -50,11 +53,36 @@ impl orrbeam_net::server::EventEmitter for TauriEventEmitter {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "orrbeam=info,orrbeam_app=info,orrbeam_core=info,orrbeam_net=info,orrbeam_platform=info".into());
+
+    // In packaged release builds, also write a rolling log file.
+    #[cfg(not(debug_assertions))]
+    {
+        use std::path::PathBuf;
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+
+        let log_dir: PathBuf = dirs::state_dir()
+            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
+            .join("orrbeam");
+        let _ = std::fs::create_dir_all(&log_dir);
+        let file_appender = tracing_appender::rolling::daily(&log_dir, "orrbeam.log");
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+        // Leak the guard so the background thread lives for the process lifetime.
+        Box::leak(Box::new(_guard));
+
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(tracing_subscriber::fmt::layer().json().with_writer(non_blocking))
+            .with(tracing_subscriber::fmt::layer().pretty())
+            .init();
+    }
+
+    #[cfg(debug_assertions)]
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "orrbeam=info".into()),
-        )
+        .with_env_filter(env_filter)
+        .pretty()
         .init();
 
     let config = Config::load().unwrap_or_else(|e| {
@@ -91,7 +119,12 @@ pub fn run() {
     let pending_mutual_trust: Arc<RwLock<HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>> =
         Arc::new(RwLock::new(HashMap::new()));
 
-    let registry = Arc::new(RwLock::new(NodeRegistry::new()));
+    let registry = Arc::new(RwLock::new(
+        NodeRegistry::load().unwrap_or_else(|e| {
+            tracing::warn!("failed to load node registry, starting fresh: {e}");
+            NodeRegistry::new()
+        }),
+    ));
     let platform = get_platform();
     let config_arc = Arc::new(RwLock::new(config.clone()));
 
@@ -189,6 +222,9 @@ pub fn run() {
             commands::remote::remote_peer_status,
             commands::discovery::get_nodes,
             commands::discovery::get_node_count,
+            commands::discovery::add_node,
+            commands::discovery::remove_node,
+            commands::discovery::list_nodes,
             commands::settings::get_config,
             commands::settings::save_config,
             commands::settings::get_identity,
@@ -215,6 +251,7 @@ pub fn run() {
                 platform: app_state.platform.clone(),
                 event_emitter: emitter,
                 shutdown: app_state.control_shutdown.clone(),
+                ip_tofu_attempts: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             });
 
             // Determine bind address from config.
@@ -225,15 +262,20 @@ pub fn run() {
                     .expect("invalid api_bind:api_port in config")
             };
 
-            // Spawn the nonce GC task.
-            control_state
-                .nonces
-                .clone()
-                .spawn_gc(app_state.control_shutdown.clone());
-
-            // Spawn the control server in the Tauri async runtime.
+            // Spawn the control server (and its nonce GC task) in the Tauri
+            // async runtime.
+            //
+            // NOTE: `NonceCache::spawn_gc` uses bare `tokio::spawn`, which
+            // requires a Tokio runtime in thread-local context. Tauri's
+            // `.setup()` closure runs on the main thread *without* that
+            // context, so calling `spawn_gc` here directly panics with
+            // "there is no reactor running". We therefore spawn the GC from
+            // inside the async block below, where the runtime context is
+            // guaranteed to be active.
             let server_state = control_state;
+            let gc_shutdown = app_state.control_shutdown.clone();
             tauri::async_runtime::spawn(async move {
+                server_state.nonces.clone().spawn_gc(gc_shutdown);
                 tracing::info!(%bind_addr, "control server starting");
                 if let Err(e) = orrbeam_net::server::serve(server_state, bind_addr).await {
                     tracing::error!("control server exited: {e}");

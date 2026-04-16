@@ -1,14 +1,24 @@
+//! HTTP client for the local Sunshine pairing API.
+//!
+//! Provides [`submit_pin_local`] for submitting a Moonlight pairing PIN to the
+//! Sunshine web API (`https://localhost:47990`).
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Errors that can occur when communicating with the local Sunshine API.
 #[derive(Error, Debug)]
 pub enum SunshineApiError {
+    /// An HTTP-level error (connection refused, non-2xx response, etc.).
     #[error("HTTP request failed: {0}")]
     Http(String),
+    /// Sunshine rejected the PIN after the maximum number of attempts.
     #[error("PIN rejected by Sunshine")]
     PinRejected,
+    /// The Sunshine API could not be reached at `https://localhost:47990`.
     #[error("Sunshine API not reachable")]
     Unreachable,
+    /// The `sunshine_username` or `sunshine_password` fields are empty.
     #[error("missing Sunshine credentials")]
     NoCredentials,
 }

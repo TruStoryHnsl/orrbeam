@@ -6,6 +6,7 @@
 //! - Remote connection orchestration (`connect_to_peer` — the crown-jewel state machine)
 //! - Debug helpers (`remote_peer_status`)
 
+use crate::error::AppError;
 use crate::AppState;
 use base64::engine::general_purpose::STANDARD_NO_PAD;
 use base64::Engine as _;
@@ -189,10 +190,10 @@ pub async fn list_trusted_peers(state: State<'_, AppState>) -> Result<Vec<Public
 /// Uses `danger_accept_invalid_certs` — the caller must pin the returned
 /// `cert_sha256` immediately after displaying the TOFU confirmation dialog.
 #[tauri::command]
-pub async fn fetch_peer_hello(address: String, port: u16) -> Result<HelloPayload, String> {
+pub async fn fetch_peer_hello(address: String, port: u16) -> Result<HelloPayload, AppError> {
     ControlClient::bootstrap_hello(&address, port)
         .await
-        .map_err(|e| format!("Could not reach {address}:{port} — {e}"))
+        .map_err(|e| AppError::Network(format!("Could not reach {address}:{port} — {e}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +208,7 @@ pub async fn fetch_peer_hello(address: String, port: u16) -> Result<HelloPayload
 pub async fn confirm_trusted_peer(
     state: State<'_, AppState>,
     draft: PeerDraft,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let peer = TrustedPeer {
         name: draft.name.clone(),
         ed25519_fingerprint: draft.ed25519_fingerprint,
@@ -225,10 +226,10 @@ pub async fn confirm_trusted_peer(
     let mut store = state.peers.write().await;
     store
         .upsert(peer)
-        .map_err(|e| format!("Failed to add peer '{}': {e}", draft.name))?;
+        .map_err(|e| AppError::Internal(format!("Failed to add peer '{}': {e}", draft.name)))?;
     store
         .save()
-        .map_err(|e| format!("Failed to save peer store: {e}"))?;
+        .map_err(|e| AppError::Internal(format!("Failed to save peer store: {e}")))?;
 
     tracing::info!(peer = %draft.name, "confirmed and persisted trusted peer");
     Ok(())
@@ -245,13 +246,13 @@ pub async fn confirm_trusted_peer(
 pub async fn remove_trusted_peer(
     state: State<'_, AppState>,
     name: String,
-) -> Result<bool, String> {
+) -> Result<bool, AppError> {
     let mut store = state.peers.write().await;
     let removed = store.remove(&name).is_some();
     if removed {
         store
             .save()
-            .map_err(|e| format!("Failed to save peer store after removing '{name}': {e}"))?;
+            .map_err(|e| AppError::Internal(format!("Failed to save peer store after removing '{name}': {e}")))?;
         tracing::info!(peer = %name, "removed trusted peer");
     }
     Ok(removed)
@@ -267,23 +268,23 @@ pub async fn update_peer_permissions(
     state: State<'_, AppState>,
     name: String,
     permissions: PeerPermissions,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut store = state.peers.write().await;
 
     // Clone the existing peer, update permissions, upsert.
     let mut peer = store
         .get(&name)
-        .ok_or_else(|| format!("Peer '{name}' not found"))?
+        .ok_or_else(|| AppError::NotFound(format!("peer \'{name}\' not found")))?
         .clone();
 
     peer.permissions = permissions;
 
     store
         .upsert(peer)
-        .map_err(|e| format!("Failed to update permissions for '{name}': {e}"))?;
+        .map_err(|e| AppError::Internal(format!("Failed to update permissions for '{name}': {e}")))?;
     store
         .save()
-        .map_err(|e| format!("Failed to save peer store: {e}"))?;
+        .map_err(|e| AppError::Internal(format!("Failed to save peer store: {e}")))?;
 
     tracing::info!(peer = %name, "updated peer permissions");
     Ok(())
@@ -311,11 +312,11 @@ pub async fn request_mutual_trust(
     address: String,
     port: u16,
     note: Option<String>,
-) -> Result<MutualTrustInitResult, String> {
+) -> Result<MutualTrustInitResult, AppError> {
     // Step 1: fetch receiver's hello.
     let receiver_hello = ControlClient::bootstrap_hello(&address, port)
         .await
-        .map_err(|e| format!("Could not reach {address}:{port} — {e}"))?;
+        .map_err(|e| AppError::Network(format!("Could not reach {address}:{port} — {e}")))?;
 
     // Step 2: build our own hello and POST the trust request.
     let our_hello = build_own_hello(&state).await;
@@ -326,7 +327,7 @@ pub async fn request_mutual_trust(
         .danger_accept_invalid_certs(true)
         .timeout(std::time::Duration::from_secs(10))
         .build()
-        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+        .map_err(|e| AppError::Internal(format!("Failed to build HTTP client: {e}")))?;
 
     let url = format!("https://{address}:{port}/v1/mutual-trust-request");
     let body = serde_json::json!({
@@ -340,13 +341,13 @@ pub async fn request_mutual_trust(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Failed to send trust request to {address}:{port} — {e}"))?;
+        .map_err(|e| AppError::Network(format!("Failed to send trust request to {address}:{port} — {e}")))?;
 
     if !resp.status().is_success() {
         let status = resp.status().as_u16();
-        return Err(format!(
+        return Err(AppError::Internal(format!(
             "Receiver rejected the trust request (HTTP {status})"
-        ));
+        )));
     }
 
     tracing::info!(
@@ -496,23 +497,22 @@ pub async fn approve_mutual_trust_request(
     state: State<'_, AppState>,
     _app: AppHandle,
     request_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let id: Uuid = request_id
-        .parse()
-        .map_err(|_| format!("Invalid request ID: {request_id}"))?;
+        .parse().map_err(|_| AppError::InvalidInput(format!("invalid request ID: {request_id}")))?;
 
     // Fetch the pending entry (read lock).
     let initiator_hello = {
         let map = state.pending_mutual_trust.read().await;
         let entry = map
             .get(&id)
-            .ok_or_else(|| format!("Trust request '{request_id}' not found or already resolved"))?;
+            .ok_or_else(|| AppError::NotFound(format!("trust request '{request_id}' not found or already resolved")))?;
 
         if entry.status != MutualTrustStatus::Pending {
-            return Err(format!(
+            return Err(AppError::Internal(format!(
                 "Trust request '{request_id}' is already {:?}",
                 entry.status
-            ));
+            )));
         }
         entry.initiator.clone()
     };
@@ -536,10 +536,10 @@ pub async fn approve_mutual_trust_request(
         let mut store = state.peers.write().await;
         store
             .upsert(peer)
-            .map_err(|e| format!("Failed to persist initiator as peer: {e}"))?;
+            .map_err(|e| AppError::Internal(format!("Failed to persist initiator as peer: {e}")))?;
         store
             .save()
-            .map_err(|e| format!("Failed to save peer store: {e}"))?;
+            .map_err(|e| AppError::Internal(format!("Failed to save peer store: {e}")))?;
     }
 
     // Build our own hello to embed in the approval response.
@@ -571,21 +571,17 @@ pub async fn approve_mutual_trust_request(
 pub async fn reject_mutual_trust_request(
     state: State<'_, AppState>,
     request_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let id: Uuid = request_id
-        .parse()
-        .map_err(|_| format!("Invalid request ID: {request_id}"))?;
+        .parse().map_err(|_| AppError::InvalidInput(format!("invalid request ID: {request_id}")))?;
 
     let mut map = state.pending_mutual_trust.write().await;
     let entry = map
         .get_mut(&id)
-        .ok_or_else(|| format!("Trust request '{request_id}' not found or already resolved"))?;
+        .ok_or_else(|| AppError::NotFound(format!("trust request '{request_id}' not found or already resolved")))?;
 
     if entry.status != MutualTrustStatus::Pending {
-        return Err(format!(
-            "Trust request '{request_id}' is already {:?}",
-            entry.status
-        ));
+        return Err(AppError::InvalidInput(format!("trust request '{request_id}' is already {:?}", entry.status)));
     }
 
     entry.status = MutualTrustStatus::Rejected;
@@ -654,7 +650,7 @@ pub async fn connect_to_peer(
     state: State<'_, AppState>,
     app: AppHandle,
     peer_name: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // ── Stage: resolving ────────────────────────────────────────────────────
     emit_progress(&app, "resolving", &peer_name, None, None);
 
@@ -663,19 +659,19 @@ pub async fn connect_to_peer(
         store
             .get(&peer_name)
             .ok_or_else(|| {
-                let msg = format!("Peer '{peer_name}' not found in trusted peers");
-                emit_progress(&app, "resolving", &peer_name, None, Some(&msg));
-                msg
+                let msg_str = format!("Peer '{peer_name}' not found in trusted peers");
+                emit_progress(&app, "resolving", &peer_name, None, Some(&msg_str));
+                AppError::Network(msg_str)
             })?
             .clone()
     };
 
     let client = ControlClient::new(state.identity.clone(), &peer)
         .map_err(|e| {
-            let msg = format!("Failed to build connection client for '{peer_name}': {e}");
-            emit_progress(&app, "resolving", &peer_name, None, Some(&msg));
-            msg
-        })?;
+            let msg_str = format!("Failed to build connection client for '{peer_name}': {e}");
+            emit_progress(&app, "resolving", &peer_name, None, Some(&msg_str));
+                AppError::Network(msg_str)
+            })?;
 
     // ── Stage: probing ──────────────────────────────────────────────────────
     emit_progress(&app, "probing", &peer_name, None, None);
@@ -686,19 +682,19 @@ pub async fn connect_to_peer(
     )
     .await
     .map_err(|_| {
-        let msg = format!(
+        let msg_str = format!(
             "orrbeam is not running on '{peer_name}'. Start it manually, then retry."
         );
-        emit_progress(&app, "probing", &peer_name, None, Some(&msg));
-        msg
-    })?
+        emit_progress(&app, "probing", &peer_name, None, Some(&msg_str));
+                AppError::Network(msg_str)
+            })?
     .map_err(|e| {
-        let msg = format!(
+        let msg_str = format!(
             "orrbeam is not running on '{peer_name}'. Start it manually, then retry. (detail: {e})"
         );
-        emit_progress(&app, "probing", &peer_name, None, Some(&msg));
-        msg
-    })?;
+        emit_progress(&app, "probing", &peer_name, None, Some(&msg_str));
+                AppError::Network(msg_str)
+            })?;
 
     // ── Stage: remote_starting ──────────────────────────────────────────────
     emit_progress(&app, "remote_starting", &peer_name, None, None);
@@ -712,20 +708,20 @@ pub async fn connect_to_peer(
     if !sunshine_running {
         // Ask remote to start Sunshine.
         client.sunshine_start().await.map_err(|e| {
-            let msg = format!("Failed to start Sunshine on '{peer_name}': {e}");
-            emit_progress(&app, "remote_starting", &peer_name, None, Some(&msg));
-            msg
-        })?;
+            let msg_str = format!("Failed to start Sunshine on '{peer_name}': {e}");
+            emit_progress(&app, "remote_starting", &peer_name, None, Some(&msg_str));
+                AppError::Network(msg_str)
+            })?;
 
         // Poll until running (20 s timeout).
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(20);
         loop {
             if tokio::time::Instant::now() >= deadline {
-                let msg = format!(
+                let msg_str = format!(
                     "Sunshine on '{peer_name}' did not start within 20 seconds"
                 );
-                emit_progress(&app, "remote_starting", &peer_name, None, Some(&msg));
-                return Err(msg);
+                emit_progress(&app, "remote_starting", &peer_name, None, Some(&msg_str));
+                return Err(AppError::Network(msg_str));
             }
 
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -800,35 +796,35 @@ pub async fn connect_to_peer(
     )
     .await
     .map_err(|_| {
-        let msg = format!("Pairing with '{peer_name}' timed out after 25 seconds");
-        emit_progress(&app, "paired_parallel", &peer_name, None, Some(&msg));
-        msg
-    })?;
+        let msg_str = format!("Pairing with '{peer_name}' timed out after 25 seconds");
+        emit_progress(&app, "paired_parallel", &peer_name, None, Some(&msg_str));
+                AppError::Network(msg_str)
+            })?;
 
     // Evaluate local result (spawn_blocking JoinHandle).
     local_result
         .map_err(|e| {
-            let msg = format!("Pairing task panicked for '{peer_name}': {e}");
-            emit_progress(&app, "paired_parallel", &peer_name, None, Some(&msg));
-            msg
-        })?
+            let msg_str = format!("Pairing task panicked for '{peer_name}': {e}");
+            emit_progress(&app, "paired_parallel", &peer_name, None, Some(&msg_str));
+                AppError::Network(msg_str)
+            })?
         .map_err(|e| {
-            let msg = format!("Local Moonlight pairing failed for '{peer_name}': {e}");
-            emit_progress(&app, "paired_parallel", &peer_name, None, Some(&msg));
-            msg
-        })?;
+            let msg_str = format!("Local Moonlight pairing failed for '{peer_name}': {e}");
+            emit_progress(&app, "paired_parallel", &peer_name, None, Some(&msg_str));
+                AppError::Network(msg_str)
+            })?;
 
     // Evaluate remote result — `accepted: true` is the success signal.
     let pair_accept_resp = remote_result.map_err(|e| {
-        let msg = format!("Remote pairing PIN was not accepted by '{peer_name}': {e}");
-        emit_progress(&app, "paired_parallel", &peer_name, None, Some(&msg));
-        msg
-    })?;
+        let msg_str = format!("Remote pairing PIN was not accepted by '{peer_name}': {e}");
+        emit_progress(&app, "paired_parallel", &peer_name, None, Some(&msg_str));
+                AppError::Network(msg_str)
+            })?;
 
     if !pair_accept_resp.accepted {
-        let msg = format!("Sunshine on '{peer_name}' rejected the pairing PIN");
-        emit_progress(&app, "paired_parallel", &peer_name, None, Some(&msg));
-        return Err(msg);
+        let msg_str = format!("Sunshine on '{peer_name}' rejected the pairing PIN");
+        emit_progress(&app, "paired_parallel", &peer_name, None, Some(&msg_str));
+        return Err(AppError::Network(msg_str));
     }
 
     tracing::info!(peer = %peer_name, "pairing completed successfully (PIN <redacted>)");
@@ -845,15 +841,15 @@ pub async fn connect_to_peer(
     })
     .await
     .map_err(|e| {
-        let msg = format!("Moonlight launch task panicked for '{peer_name}': {e}");
-        emit_progress(&app, "streaming_local", &peer_name, None, Some(&msg));
-        msg
-    })?
+        let msg_str = format!("Moonlight launch task panicked for '{peer_name}': {e}");
+        emit_progress(&app, "streaming_local", &peer_name, None, Some(&msg_str));
+                AppError::Network(msg_str)
+            })?
     .map_err(|e| {
-        let msg = format!("Failed to start Moonlight for '{peer_name}': {e}");
-        emit_progress(&app, "streaming_local", &peer_name, None, Some(&msg));
-        msg
-    })?;
+        let msg_str = format!("Failed to start Moonlight for '{peer_name}': {e}");
+        emit_progress(&app, "streaming_local", &peer_name, None, Some(&msg_str));
+                AppError::Network(msg_str)
+            })?;
 
     // ── Stage: done ─────────────────────────────────────────────────────────
     emit_progress(&app, "done", &peer_name, Some("Connected"), None);
@@ -874,22 +870,22 @@ pub async fn connect_to_peer(
 pub async fn remote_peer_status(
     state: State<'_, AppState>,
     peer_name: String,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, AppError> {
     let peer = {
         let store = state.peers.read().await;
         store
             .get(&peer_name)
-            .ok_or_else(|| format!("Peer '{peer_name}' not found in trusted peers"))?
+            .ok_or_else(|| AppError::NotFound(format!("peer \'{peer_name}\' not found")))?
             .clone()
     };
 
     let client = ControlClient::new(state.identity.clone(), &peer)
-        .map_err(|e| format!("Failed to build client for '{peer_name}': {e}"))?;
+        .map_err(|e| AppError::Internal(format!("Failed to build client for '{peer_name}': {e}")))?;
 
     let status = client
         .status()
         .await
-        .map_err(|e| format!("Failed to query status of '{peer_name}': {e}"))?;
+        .map_err(|e| AppError::Internal(format!("Failed to query status of '{peer_name}': {e}")))?;
 
     Ok(serde_json::json!({
         "sunshine": status.sunshine,

@@ -1,13 +1,18 @@
+//! Ed25519 node identity for mesh authentication.
+
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use thiserror::Error;
 
+/// Errors that can occur when loading or generating an [`Identity`].
 #[derive(Error, Debug)]
 pub enum IdentityError {
+    /// An I/O error while reading or writing the signing key file.
     #[error("failed to read identity: {0}")]
     Io(#[from] std::io::Error),
+    /// The stored key bytes could not be decoded as a valid Ed25519 signing key.
     #[error("invalid key data")]
     InvalidKey,
 }
@@ -18,10 +23,12 @@ pub struct Identity {
     signing_key: SigningKey,
 }
 
-/// Serializable public identity info.
+/// Serializable public identity info for sharing over the wire.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicIdentity {
+    /// Human-readable fingerprint (first 16 hex chars of the Ed25519 public key).
     pub fingerprint: String,
+    /// Raw 32-byte Ed25519 public key bytes.
     pub public_key: Vec<u8>,
 }
 
@@ -93,5 +100,43 @@ impl Identity {
     fn key_path() -> PathBuf {
         let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
         base.join("orrbeam").join("identity").join("signing.key")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_produces_unique_keys() {
+        let a = Identity::generate().expect("generate a");
+        let b = Identity::generate().expect("generate b");
+        assert_ne!(a.fingerprint(), b.fingerprint());
+    }
+
+    #[test]
+    fn fingerprint_is_16_hex_chars() {
+        let id = Identity::generate().expect("generate");
+        let fp = id.fingerprint();
+        assert_eq!(fp.len(), 16, "fingerprint must be 16 hex chars");
+        assert!(fp.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn public_identity_matches_fingerprint() {
+        let id = Identity::generate().expect("generate");
+        let pub_id = id.public_identity();
+        assert_eq!(pub_id.fingerprint, id.fingerprint());
+        assert_eq!(pub_id.public_key.len(), 32);
+    }
+
+    #[test]
+    fn signing_key_roundtrip() {
+        let id = Identity::generate().expect("generate");
+        let bytes = id.signing_key().to_bytes();
+        let id2 = Identity {
+            signing_key: SigningKey::from_bytes(&bytes),
+        };
+        assert_eq!(id.fingerprint(), id2.fingerprint());
     }
 }

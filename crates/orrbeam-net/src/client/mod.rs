@@ -401,7 +401,11 @@ impl ControlClient {
             op = op_name,
             max_attempts, "all retry attempts exhausted"
         );
-        Err(last_err.expect("loop ran at least once"))
+        Err(last_err.unwrap_or_else(|| {
+            ClientError::InvalidResponse(
+                "retry loop ran zero iterations — max_attempts must be >= 1".into(),
+            )
+        }))
     }
 
     // ── Public typed methods ──────────────────────────────────────────────────
