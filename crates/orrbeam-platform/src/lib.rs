@@ -1,5 +1,6 @@
 mod common;
 mod detect;
+pub mod shared_control;
 
 #[cfg(target_os = "linux")]
 mod linux;

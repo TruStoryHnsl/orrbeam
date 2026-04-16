@@ -36,6 +36,16 @@ pub struct Config {
     pub api_bind: String,
     /// TCP port the control-plane HTTPS server listens on.
     pub api_port: u16,
+    /// Enable the shared-control (multi-participant input) feature.
+    ///
+    /// When `true`, the platform layer will accept inbound shared-control
+    /// session requests. Defaults to `false`.
+    pub shared_control_enabled: bool,
+    /// Maximum number of simultaneous shared-control participants.
+    ///
+    /// Capped by the platform implementation; on Linux this is limited by
+    /// available uinput device slots. Defaults to `2`.
+    pub max_participants: u8,
 }
 
 impl Default for Config {
@@ -54,6 +64,8 @@ impl Default for Config {
             static_nodes: Vec::new(),
             api_bind: "0.0.0.0".to_string(),
             api_port: 47782,
+            shared_control_enabled: false,
+            max_participants: 2,
         }
     }
 }
