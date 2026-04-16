@@ -1,5 +1,8 @@
 mod commands;
+pub mod error;
 mod tray;
+
+pub use error::AppError;
 
 use orrbeam_core::{Config, Identity, NodeRegistry};
 use orrbeam_net::DiscoveryManager;

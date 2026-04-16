@@ -1,3 +1,4 @@
+use crate::error::AppError;
 use crate::AppState;
 use orrbeam_core::{Node, NodeState};
 use serde::Deserialize;
@@ -6,13 +7,13 @@ use tauri::State;
 use tracing::{info, warn};
 
 #[tauri::command]
-pub async fn get_nodes(state: State<'_, AppState>) -> Result<Vec<Node>, String> {
+pub async fn get_nodes(state: State<'_, AppState>) -> Result<Vec<Node>, AppError> {
     let registry = state.registry.read().await;
     Ok(registry.all().into_iter().cloned().collect())
 }
 
 #[tauri::command]
-pub async fn get_node_count(state: State<'_, AppState>) -> Result<usize, String> {
+pub async fn get_node_count(state: State<'_, AppState>) -> Result<usize, AppError> {
     let registry = state.registry.read().await;
     Ok(registry.online_count())
 }
@@ -26,15 +27,22 @@ pub struct AddNodeInput {
 }
 
 /// Add a node to the registry manually and persist the registry to disk.
-///
-/// The node is added with `state = offline` (unknown reachability until
-/// discovery confirms it). Returns an error if the address is not a valid IP.
 #[tauri::command]
-pub async fn add_node(state: State<'_, AppState>, node: AddNodeInput) -> Result<(), String> {
-    let address: IpAddr = node
-        .address
-        .parse()
-        .map_err(|_| format!("invalid IP address: {}", node.address))?;
+pub async fn add_node(state: State<'_, AppState>, node: AddNodeInput) -> Result<(), AppError> {
+    // Input validation
+    if node.name.trim().is_empty() {
+        return Err(AppError::InvalidInput("node name must not be empty".into()));
+    }
+    if node.address.trim().is_empty() {
+        return Err(AppError::InvalidInput("node address must not be empty".into()));
+    }
+    if node.port == 0 {
+        return Err(AppError::InvalidInput("port must be non-zero".into()));
+    }
+
+    let address: IpAddr = node.address.parse().map_err(|_| {
+        AppError::InvalidInput(format!("invalid IP address: {}", node.address))
+    })?;
 
     let new_node = Node {
         name: node.name.clone(),
@@ -64,11 +72,15 @@ pub async fn add_node(state: State<'_, AppState>, node: AddNodeInput) -> Result<
 
 /// Remove a node from the registry by name and persist the change.
 #[tauri::command]
-pub async fn remove_node(state: State<'_, AppState>, name: String) -> Result<(), String> {
+pub async fn remove_node(state: State<'_, AppState>, name: String) -> Result<(), AppError> {
+    if name.trim().is_empty() {
+        return Err(AppError::InvalidInput("node name must not be empty".into()));
+    }
+
     let mut registry = state.registry.write().await;
     let removed = registry.remove(&name);
     if removed.is_none() {
-        return Err(format!("node '{}' not found", name));
+        return Err(AppError::NotFound(format!("node '{}' not found", name)));
     }
     info!(%name, "node removed");
 
@@ -81,7 +93,7 @@ pub async fn remove_node(state: State<'_, AppState>, name: String) -> Result<(),
 
 /// List all nodes in the registry (online and offline).
 #[tauri::command]
-pub async fn list_nodes(state: State<'_, AppState>) -> Result<Vec<Node>, String> {
+pub async fn list_nodes(state: State<'_, AppState>) -> Result<Vec<Node>, AppError> {
     let registry = state.registry.read().await;
     Ok(registry.all().into_iter().cloned().collect())
 }
