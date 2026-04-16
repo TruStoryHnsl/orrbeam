@@ -36,7 +36,7 @@ pub use nonce::NonceCache;
 
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use axum::routing::{get, post};
@@ -124,6 +124,12 @@ pub struct ControlState {
     pub pending_mutual_trust: Arc<RwLock<HashMap<uuid::Uuid, PendingMutualTrust>>>,
     /// Platform abstraction for Sunshine / Moonlight process management.
     pub platform: Arc<dyn orrbeam_platform::Platform + Send + Sync>,
+    /// Active shared-control session, if any.
+    ///
+    /// Shared with the Tauri `AppState` via the same `Arc` so that Tauri
+    /// commands (`start_shared_control`, etc.) and the HTTP server join
+    /// endpoint both operate on the same live session.
+    pub shared_control: Arc<Mutex<Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>>>,
     /// Event emitter for forwarding control-plane events to the UI layer.
     pub event_emitter: Arc<dyn EventEmitter>,
     /// Cancellation token; cancel this to initiate a graceful shutdown.
@@ -156,6 +162,7 @@ pub fn build_router(state: Arc<ControlState>) -> axum::Router {
         .route("/sunshine/stop", post(routes::sunshine_stop))
         .route("/pair/accept", post(routes::pair_accept))
         .route("/peers", get(routes::peers_list))
+        .route("/shared-control/join", post(routes::shared_control_join))
         .layer(from_fn_with_state(
             state.clone(),
             middleware::require_signed,
@@ -363,6 +370,7 @@ mod tests {
             nonces: NonceCache::new(),
             pending_mutual_trust: Arc::new(RwLock::new(HashMap::new())),
             platform: Arc::new(StubPlatform),
+            shared_control: Arc::new(std::sync::Mutex::new(None)),
             event_emitter: Arc::new(NoopEmitter),
             shutdown: CancellationToken::new(),
             ip_tofu_attempts: Arc::new(RwLock::new(HashMap::new())),

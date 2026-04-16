@@ -75,6 +75,15 @@ pub trait SharedControlSession: Send + Sync {
     /// Returns [`PlatformError::Command`] if no participant exists at that index.
     fn remove_participant(&mut self, slot_index: u8) -> Result<(), PlatformError>;
 
+    /// Remove a participant by name.
+    ///
+    /// Looks up the participant's slot index by name, then calls
+    /// [`remove_participant`]. Returns [`PlatformError::Command`] if not found.
+    fn remove_participant_by_name(&mut self, name: &str) -> Result<(), PlatformError>;
+
+    /// List the names of all active participants.
+    fn list_participants(&self) -> Vec<String>;
+
     /// Route an input event to the specified participant slot.
     ///
     /// On Linux, writes a real `input_event` struct to the participant's
@@ -341,6 +350,22 @@ impl SharedControlSession for LinuxSharedControlSession {
         }
     }
 
+    fn remove_participant_by_name(&mut self, name: &str) -> Result<(), PlatformError> {
+        let slot_index = self
+            .participants
+            .iter()
+            .find(|p| p.name == name)
+            .map(|p| p.slot_index)
+            .ok_or_else(|| {
+                PlatformError::Command(format!("no participant named '{name}'"))
+            })?;
+        self.remove_participant(slot_index)
+    }
+
+    fn list_participants(&self) -> Vec<String> {
+        self.participants.iter().map(|p| p.name.clone()).collect()
+    }
+
     fn route_input(&mut self, slot_index: u8, event: InputEvent) -> Result<(), PlatformError> {
         let slot = self
             .participants
@@ -392,6 +417,14 @@ impl SharedControlSession for MacOsSharedControlSession {
         Err(PlatformError::Unsupported)
     }
 
+    fn remove_participant_by_name(&mut self, _name: &str) -> Result<(), PlatformError> {
+        Err(PlatformError::Unsupported)
+    }
+
+    fn list_participants(&self) -> Vec<String> {
+        vec![]
+    }
+
     fn route_input(&mut self, _slot_index: u8, _event: InputEvent) -> Result<(), PlatformError> {
         Err(PlatformError::Unsupported)
     }
@@ -413,6 +446,14 @@ impl SharedControlSession for WindowsSharedControlSession {
 
     fn remove_participant(&mut self, _slot_index: u8) -> Result<(), PlatformError> {
         Err(PlatformError::Unsupported)
+    }
+
+    fn remove_participant_by_name(&mut self, _name: &str) -> Result<(), PlatformError> {
+        Err(PlatformError::Unsupported)
+    }
+
+    fn list_participants(&self) -> Vec<String> {
+        vec![]
     }
 
     fn route_input(&mut self, _slot_index: u8, _event: InputEvent) -> Result<(), PlatformError> {

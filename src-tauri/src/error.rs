@@ -47,6 +47,10 @@ pub enum AppError {
     /// An unexpected internal error that does not fit another category.
     #[error("internal error: {0}")]
     Internal(String),
+
+    /// The requested operation is not supported on this platform.
+    #[error("unsupported: {0}")]
+    Unsupported(String),
 }
 
 /// JSON wire representation of [`AppError`] sent to the frontend.
@@ -68,6 +72,7 @@ impl Serialize for AppError {
             Self::Identity(m) => ("identity_error", m.clone()),
             Self::Network(m) => ("network_error", m.clone()),
             Self::Internal(m) => ("internal_error", m.clone()),
+            Self::Unsupported(m) => ("unsupported", m.clone()),
         };
         AppErrorBody { code, message }.serialize(serializer)
     }
@@ -79,7 +84,12 @@ impl Serialize for AppError {
 
 impl From<orrbeam_platform::PlatformError> for AppError {
     fn from(e: orrbeam_platform::PlatformError) -> Self {
-        AppError::Platform(e.to_string())
+        match e {
+            orrbeam_platform::PlatformError::Unsupported => {
+                AppError::Unsupported("operation not supported on this platform".into())
+            }
+            other => AppError::Platform(other.to_string()),
+        }
     }
 }
 

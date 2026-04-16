@@ -60,6 +60,8 @@ pub enum ControlError {
     TofuPending,
     /// The mutual-trust request was not found or has expired.
     TofuExpired,
+    /// The shared-control session is not active on this node.
+    SharedControlUnavailable,
 }
 
 impl IntoResponse for ControlError {
@@ -130,6 +132,11 @@ impl IntoResponse for ControlError {
                 StatusCode::GONE,
                 "tofu_expired",
                 "mutual trust request has expired".into(),
+            ),
+            Self::SharedControlUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "shared_control_unavailable",
+                "shared-control session is not active".into(),
             ),
         };
 
@@ -289,6 +296,7 @@ mod tests {
             ControlError::RateLimited,
             ControlError::TofuPending,
             ControlError::TofuExpired,
+            ControlError::SharedControlUnavailable,
         ];
 
         for err in variants {
