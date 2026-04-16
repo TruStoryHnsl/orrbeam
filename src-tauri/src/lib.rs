@@ -248,6 +248,7 @@ pub fn run() {
                 platform: app_state.platform.clone(),
                 event_emitter: emitter,
                 shutdown: app_state.control_shutdown.clone(),
+                ip_tofu_attempts: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             });
 
             // Determine bind address from config.

@@ -20,9 +20,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{ConnectInfo, Extension, Path, State},
     Json,
 };
+use std::net::SocketAddr;
 use base64::engine::general_purpose::STANDARD_NO_PAD;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
@@ -216,12 +217,27 @@ pub async fn hello(
 /// outcome.
 pub async fn mutual_trust_request(
     State(state): State<Arc<ControlState>>,
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     Json(body): Json<MutualTrustBody>,
 ) -> Result<Json<MutualTrustResponse>, ControlError> {
     let now = time::OffsetDateTime::now_utc();
     let expires_at = now + Duration::from_secs(60);
 
-    // Rate-limit: reject if there is already a non-expired pending entry.
+    let client_ip = peer_addr.ip();
+
+    // §19.9 Per-IP rate-limit: max 3 TOFU requests per IP per 60-second window.
+    {
+        let mut ip_map = state.ip_tofu_attempts.write().await;
+        let attempts = ip_map.entry(client_ip).or_default();
+        let cutoff = std::time::Instant::now() - std::time::Duration::from_secs(60);
+        attempts.retain(|&t| t > cutoff);
+        if attempts.len() >= 3 {
+            return Err(ControlError::RateLimited);
+        }
+        attempts.push(std::time::Instant::now());
+    }
+
+    // §19.9 Global pending cap: max 1 pending request at a time.
     {
         let store = state.pending_mutual_trust.read().await;
         for entry in store.values() {

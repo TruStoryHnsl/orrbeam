@@ -35,8 +35,9 @@ pub use middleware::PeerContext;
 pub use nonce::NonceCache;
 
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::routing::{get, post};
 use tokio::sync::RwLock;
@@ -127,6 +128,11 @@ pub struct ControlState {
     pub event_emitter: Arc<dyn EventEmitter>,
     /// Cancellation token; cancel this to initiate a graceful shutdown.
     pub shutdown: CancellationToken,
+    /// Per-IP timestamps of recent TOFU requests, for rate-limiting (§19.9).
+    ///
+    /// Enforces max 3 requests per IP per 60-second window on the
+    /// `POST /v1/mutual-trust-request` endpoint.
+    pub ip_tofu_attempts: Arc<RwLock<HashMap<IpAddr, Vec<Instant>>>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +222,7 @@ pub async fn serve(
         axum_server::tls_rustls::RustlsConfig::from_config(Arc::new(tls_config)),
     )
     .handle(handle)
-    .serve(router.into_make_service())
+    .serve(router.into_make_service_with_connect_info::<std::net::SocketAddr>())
     .await?;
 
     Ok(())
@@ -359,6 +365,7 @@ mod tests {
             platform: Arc::new(StubPlatform),
             event_emitter: Arc::new(NoopEmitter),
             shutdown: CancellationToken::new(),
+            ip_tofu_attempts: Arc::new(RwLock::new(HashMap::new())),
         });
 
         // This call exercises the full router construction — if it compiles and
