@@ -22,6 +22,7 @@ orrbeam-net = { path = "../crates/orrbeam-net" }
 orrbeam-platform = { path = "../crates/orrbeam-platform" }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
+thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
