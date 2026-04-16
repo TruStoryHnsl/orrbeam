@@ -1,90 +1,58 @@
 # Contributing to Orrbeam
 
-## Local Development Setup
+## License Requirements
 
-1. Install Rust 1.80+, Node.js 20+, and the Tauri v2 system dependencies for your OS.
-2. Clone the repo and install frontend packages:
+All dependencies (Rust crates and npm packages) must use OSS-compatible,
+non-copyleft licenses. Permitted licenses:
 
-   ```bash
-   git clone git@github.com:TruStoryHnsl/orrbeam.git
-   cd orrbeam
-   cd frontend && npm install && cd ..
-   ```
+**Rust (cargo-deny enforced):**
+- MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Zlib, CC0-1.0
 
-3. Run the desktop app in development mode:
+**npm (check-licenses.sh enforced):**
+- MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Unlicense, CC0-1.0
 
-   ```bash
-   cargo tauri dev
-   ```
+**Not permitted:** GPL-2.0, GPL-3.0, AGPL-3.0, LGPL-2.0, LGPL-2.1, LGPL-3.0
 
-4. For frontend-only iteration, run:
-
-   ```bash
-   cd frontend && npm run dev
-   ```
-
-## Workspace Layout
-
-- `crates/orrbeam-core`: shared types, config, identity, peers, TLS, wire helpers
-- `crates/orrbeam-net`: discovery plus control-plane client/server code
-- `crates/orrbeam-platform`: Linux, macOS, and Windows platform adapters
-- `src-tauri`: Tauri shell, IPC command handlers, tray wiring, app state
-- `frontend`: React UI, Zustand stores, Tauri API wrapper, shared components
-
-## Branch Naming
-
-Use a short prefix that matches the kind of work:
-
-- `feat/<slug>`
-- `fix/<slug>`
-- `refactor/<slug>`
-- `chore/<slug>`
-
-Keep one topic per branch. Do not mix unrelated fixes into the same branch.
-
-## Commit Format
-
-Use Conventional Commits for every commit:
-
-- `feat: add persistent node registry`
-- `fix: reject malformed peer addresses`
-- `docs: add architecture overview`
-- `chore: align frontend package metadata`
-
-If the change is breaking, use `feat!:` or add a `BREAKING CHANGE:` footer.
-
-## Verification Before Commit
-
-Run the expected checks before opening a pull request:
+## Running License Checks
 
 ```bash
-cargo fmt --all
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cd frontend && npm run test
+# Install cargo-deny (once)
+cargo install cargo-deny
+
+# Check Rust dependency licenses
+cargo deny check licenses
+
+# Check all deny rules (licenses + advisories + bans + sources)
+cargo deny check
+
+# Check npm licenses (requires npm install in frontend/ first)
+./scripts/check-licenses.sh
 ```
 
-If your change touches the frontend build or TypeScript surface, also run:
+If `cargo deny check licenses` fails due to a new dependency, either:
+1. Choose an alternative crate with a compatible license, or
+2. Add an explicit `[[licenses.exceptions]]` entry to `deny.toml` with justification.
+
+## Commit Style
+
+All commits must follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat(scope): add something new
+fix(scope): correct a bug
+docs: update readme
+chore: update dependencies
+```
+
+## Development Setup
 
 ```bash
-cd frontend && npm run build
+# Rust + Tauri backend
+cargo build --workspace
+
+# Frontend
+cd frontend && npm install && npm run dev
+
+# Full dev mode (hot-reload)
+cargo tauri dev
 ```
-
-## Pull Request Process
-
-- Open a focused branch with a conventional-commit-ready PR title
-- Link the issue or plan item the PR addresses
-- Include a short test plan with exact commands run
-- Keep docs in sync with code changes
-- Wait for CI to pass before requesting review
-- Require at least one review before merge
-
-## Releases and Changelog
-
-- Releases use `/release orrbeam <bump>` from `main`, where `<bump>` is `patch`, `minor`, or `major`
-- The changelog is generated from conventional commits and then curated into `CHANGELOG.md`
-- Do not cut ad hoc tags from feature branches
-
-## API Docs Publish Step
-
-`OPT-015` will wire `cargo doc --workspace --no-deps` into the release workflow. Once that lands, publish the API docs by creating the release-tagged build from `main`; the GitHub Actions release job will generate the docs artifact and push it to GitHub Pages. Until `OPT-015` is implemented, there is no supported manual publish path.
