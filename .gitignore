@@ -39,6 +39,9 @@ Thumbs.db
 # Orrchestrator workflow state (local tooling)
 .orrch/
 
+# Claude Code workflow state (local tooling)
+.claude/
+
 # Generated icons (keep source, ignore generated)
 src-tauri/icons/icon.png
 src-tauri/gen/
