@@ -140,20 +140,20 @@ Identity material lives separately under `~/.local/share/orrbeam/`:
 - Static peer entries in `config.yaml` for explicit lists
 - Ed25519-signed control-plane requests with nonce + timestamp replay protection
 - TLS-1.3 with cert pinning between trusted peers
-- Cross-platform Rust workspace (Linux + macOS active; Windows + mobile clients planned)
+- Cross-platform Rust workspace (Linux + macOS + Windows active; mobile clients planned)
 - Frontend mock mode for UI iteration without rebuilding the Tauri shell
 - License enforcement on every dep (`cargo deny`, `scripts/check-licenses.sh`) — no GPL/LGPL/AGPL anywhere in the tree
-- Rolling JSON log file in release builds (`~/.local/state/orrbeam/orrbeam.log`); pretty tracing logs in dev with `RUST_LOG=orrbeam=debug`
+- Rolling JSON log file in release builds — Linux: `~/.local/state/orrbeam/logs/orrbeam.log`, macOS: `~/Library/Application Support/orrbeam/logs/orrbeam.log`, Windows: `%LOCALAPPDATA%\orrbeam\logs\orrbeam.log`. Pretty tracing logs in dev with `RUST_LOG=orrbeam=debug`
 
 ## Status
 
-**Active development. Single-author, single-mesh deployment today.** Day-to-day use is between `orrion` (CachyOS, RTX 3070) and `orrpheus` (macOS M1 Pro). The Tauri shell, mesh discovery, signed control plane, and trust UI are all working end-to-end on those two machines.
+**Active development. Single-author, single-mesh deployment today.** Day-to-day use is between `orrion` (CachyOS, RTX 3070), `orrpheus` (macOS M1 Pro), and `win11` (Windows 11). The Tauri shell, mesh discovery, signed control plane, and trust UI are working end-to-end on all three. Windows joins the mesh as a first-class node — both Sunshine host (NVENC / AMF / QuickSync) and moonlight-qt client.
 
 | Target | OS | Host (Sunshine) | Client (Moonlight) | State |
 |---|---|---|---|---|
 | orrion | CachyOS Linux | NVENC (RTX 3070) | moonlight-qt | Primary dev |
 | orrpheus | macOS (M1 Pro) | VideoToolbox | Moonlight.app | Primary dev |
-| Windows | Windows 10/11 | NVENC / AMF / QuickSync | Moonlight | Planned |
+| win11 | Windows 11 | NVENC / AMF / QuickSync | Moonlight | Active |
 | iPad / iPhone | iOS | n/a (client only) | Moonlight (Tauri mobile) | Planned |
 | Android | Android | n/a (client only) | Moonlight (Tauri mobile) | Planned |
 
