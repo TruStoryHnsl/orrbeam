@@ -27,7 +27,7 @@ tower-http = { version = "0.6", features = ["trace", "limit", "timeout"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pemfile = "2"
 tokio-rustls = "0.26"
-rcgen = { version = "0.13", features = ["pem"] }
+rcgen = { version = "0.14", features = ["pem"] }
 sha2 = "0.10"
 base64 = "0.22"
 time = { version = "0.3", features = ["serde", "serde-well-known", "formatting", "parsing", "macros"] }
