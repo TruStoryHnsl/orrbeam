@@ -76,9 +76,18 @@ pub fn run() {
         use tracing_subscriber::layer::SubscriberExt;
         use tracing_subscriber::util::SubscriberInitExt;
 
+        // Pick a per-platform log directory:
+        // - Linux:   $XDG_STATE_HOME/orrbeam/logs   (default ~/.local/state/orrbeam/logs)
+        // - macOS:   ~/Library/Application Support/orrbeam/logs (state_dir is None on macOS)
+        // - Windows: %LOCALAPPDATA%\orrbeam\logs
+        // dirs::state_dir() returns None on Windows and macOS, so fall back to
+        // data_local_dir() (LOCALAPPDATA on Windows, ~/Library/App Support on macOS).
         let log_dir: PathBuf = dirs::state_dir()
-            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
-            .join("orrbeam");
+            .or_else(dirs::data_local_dir)
+            .or_else(dirs::home_dir)
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("orrbeam")
+            .join("logs");
         let _ = std::fs::create_dir_all(&log_dir);
         let file_appender = tracing_appender::rolling::daily(&log_dir, "orrbeam.log");
         let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
