@@ -1,21 +1,35 @@
-## Summary
+# Summary
 
-Describe the change and its user-facing or internal impact.
+What does this change and why? One paragraph is plenty.
 
-## Linked Issue
+## Related issues
 
 Closes #
 
-## Test Plan
+## Test plan
 
-- [ ] `cargo build`
-- [ ] `cargo test`
-- [ ] Manual verification completed
-
-## Checklist
-
-- [ ] PR title follows conventional commit format
-- [ ] Tests added or updated, or not needed
-- [ ] Documentation updated, or not needed
-- [ ] `cargo fmt --all --check`
+- [ ] `cargo build --workspace`
+- [ ] `cargo test --workspace`
+- [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --all-targets --all-features -- -D warnings`
+- [ ] `cargo deny check` (if dependencies changed)
+- [ ] `cd frontend && npm run test` (if frontend changed)
+- [ ] Manual verification on at least one of: orrion (Linux), orrpheus (macOS), Windows, iOS, Android
+
+Describe what you actually exercised — not just "compiles". What user-visible
+behavior did you observe?
+
+## Breaking changes
+
+- [ ] None
+- [ ] Yes — described below
+
+If yes: what breaks, what migrates, and is the commit marked `feat!:` /
+`fix!:` (or does it carry a `BREAKING CHANGE:` footer)?
+
+## Conventions
+
+- [ ] Branch name follows `feat/…`, `fix/…`, `refactor/…`, `chore/…`, etc.
+- [ ] Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
+- [ ] No copyleft (GPL/LGPL/AGPL) dependencies introduced
+- [ ] Docs updated where behavior changed (or n/a)
