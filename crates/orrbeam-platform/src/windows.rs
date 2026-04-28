@@ -369,12 +369,12 @@ mod win32_monitors {
 
     use crate::{MonitorInfo, PlatformError};
     use std::cell::RefCell;
-    use windows::core::BOOL;
     use windows::Win32::Foundation::{LPARAM, RECT, TRUE};
     use windows::Win32::Graphics::Gdi::{
         DEVMODEW, ENUM_CURRENT_SETTINGS, EnumDisplayMonitors, EnumDisplaySettingsW,
         GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
     };
+    use windows::core::BOOL;
 
     /// `MONITORINFOF_PRIMARY` — set in `MONITORINFO::dwFlags` when this is
     /// the primary display.
