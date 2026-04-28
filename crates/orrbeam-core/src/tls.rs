@@ -215,12 +215,8 @@ impl TlsIdentity {
         std::fs::write(cert_path, &cert_pem)?;
         std::fs::write(key_path, &key_pem)?;
 
-        // Restrict key file permissions on Unix (0o600).
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(key_path, std::fs::Permissions::from_mode(0o600))?;
-        }
+        // Restrict the key file to owner only (chmod 0o600 on Unix; icacls on Windows).
+        crate::secure_file::restrict_to_owner(key_path)?;
 
         info!(
             fingerprint = %cert_sha256_hex,
