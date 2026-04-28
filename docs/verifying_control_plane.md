@@ -1,10 +1,11 @@
-# Verifying the Control Plane — orrion ↔ orrpheus
+# Verifying the Control Plane — orrion ↔ orrpheus ↔ win11
 
 ## Prerequisite checklist
 
 - [ ] orrbeam v2 running on **orrion** (`corr@orrion`, 192.168.1.152)
 - [ ] orrbeam v2 running on **orrpheus** (`coltonorr@orrpheus`, 192.168.1.132)
-- [ ] Port 47782 reachable between the two nodes (orrtellite mesh or LAN)
+- [ ] orrbeam v2 running on **win11** (`corr@win11.local` — mDNS / IPv6 link-local)
+- [ ] Port 47782 reachable between every node pair (orrtellite mesh or LAN)
 - [ ] Any old v1 Python daemon killed (`pkill -f 'orrbeam.*daemon'`)
 
 ## Quick smoke tests
@@ -383,3 +384,97 @@ grep -rn "TxtRecord\|txt_record\|mdns.*txt\|_orrbeam" \
 # Expected: TXT record construction includes only node_name, fingerprint,
 # cert_sha256, and control_port. No private key bytes, no cert PEM.
 ```
+
+---
+
+## Windows verification (win11)
+
+Windows nodes (`corr@win11.local`) participate in the mesh as a first-class
+node — both Sunshine host (NVENC / AMF / QuickSync) and moonlight-qt client.
+The TLS-1.3 control plane on `0.0.0.0:47782`, the orrbeam/1 wire protocol,
+mDNS discovery, and mutual-trust UI all work the same way as on Linux/macOS.
+
+A few Windows-specific items differ:
+
+| Item | Windows reality |
+|---|---|
+| Sunshine config path | `%PROGRAMDATA%\Sunshine\config\sunshine.conf` (LizardByte installer default) |
+| Sunshine binary | `%PROGRAMFILES%\Sunshine\sunshine.exe` (NOT on `%PATH%` by default) |
+| Moonlight binary | `%PROGRAMFILES%\Moonlight Game Streaming Client\Moonlight.exe` |
+| Log file | `%LOCALAPPDATA%\orrbeam\logs\orrbeam.log` (rolling daily, JSON in release) |
+| Identity / TLS / peers | `%APPDATA%\orrbeam\` and `%LOCALAPPDATA%\orrbeam\` (per-user; restricted via `icacls`) |
+| Hostname resolution | `win11.local` only resolves via mDNS (link-local IPv6); plain `win11` does not |
+
+### Firewall rules (PowerShell, run elevated)
+
+The Windows Defender firewall blocks inbound TCP/47782 and UDP/5353 by default
+on networks classified as Private or Public. Add explicit rules:
+
+```powershell
+# TCP — control plane (orrbeam/1)
+New-NetFirewallRule -DisplayName "Orrbeam Control Plane" `
+  -Direction Inbound -Action Allow `
+  -Protocol TCP -LocalPort 47782
+
+# UDP — mDNS service discovery
+New-NetFirewallRule -DisplayName "Orrbeam mDNS" `
+  -Direction Inbound -Action Allow `
+  -Protocol UDP -LocalPort 5353
+
+# Sunshine streaming — TCP 47984-47990 + UDP 47998-48010
+New-NetFirewallRule -DisplayName "Sunshine streaming TCP" `
+  -Direction Inbound -Action Allow `
+  -Protocol TCP -LocalPort 47984-47990
+New-NetFirewallRule -DisplayName "Sunshine streaming UDP" `
+  -Direction Inbound -Action Allow `
+  -Protocol UDP -LocalPort 47998-48010
+```
+
+Confirm the network profile is Private (mDNS does not work cross-profile):
+
+```powershell
+Get-NetConnectionProfile
+# NetworkCategory should be Private — if Public, change with:
+# Set-NetConnectionProfile -InterfaceIndex <id> -NetworkCategory Private
+```
+
+### Quick smoke tests on win11
+
+```powershell
+# 1. Confirm the orrbeam control plane is listening
+Get-NetTCPConnection -LocalPort 47782 -State Listen
+# Expected: a single LISTEN row owned by the Orrbeam process.
+
+# 2. Confirm the orrbeam process is running
+Get-Process Orrbeam | Select-Object Id, ProcessName, StartTime
+
+# 3. Hello-endpoint round-trip from a peer (no trust required)
+# (Run from orrion/orrpheus pointed at win11.)
+curl --insecure https://win11.local:47782/v1/hello | jq .
+
+# 4. Hello-endpoint round-trip the other direction
+# (Run from win11 PowerShell pointed at orrion.)
+$resp = Invoke-WebRequest -SkipCertificateCheck https://orrion:47782/v1/hello
+$resp.Content | ConvertFrom-Json | Format-List
+
+# 5. Tail the rolling log
+Get-Content "$env:LOCALAPPDATA\orrbeam\logs\orrbeam.log" -Tail 50 -Wait
+```
+
+### Mutual trust + Connect (remote)
+
+Drive the same UI flow as Linux/macOS:
+
+1. On win11, open Settings → Peers → Add peer → "Request mutual trust"
+2. Enter the peer's `address:port` (e.g. `orrion:47782` or `192.168.1.152:47782`)
+3. Approve the request from the receiving node's UI dialog
+4. Click "Connect (remote)" on a NodeCard — `PeeringProgressModal` should
+   step through resolving → probing → starting Sunshine → submitting PIN →
+   pairing → streaming.
+
+Encoder selection on Windows is auto-detected by `WindowsPlatform::gpu_info()`:
+
+- NVIDIA GPU present → `nvenc`
+- AMD/Radeon GPU present → `amf`
+- Intel iGPU present → `qsv`
+- otherwise → `software`
