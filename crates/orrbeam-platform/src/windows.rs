@@ -373,8 +373,16 @@ mod win32_monitors {
     use windows::Win32::Foundation::{LPARAM, RECT, TRUE};
     use windows::Win32::Graphics::Gdi::{
         DEVMODEW, ENUM_CURRENT_SETTINGS, EnumDisplayMonitors, EnumDisplaySettingsW,
-        GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITORINFOF_PRIMARY,
+        GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
     };
+
+    /// `MONITORINFOF_PRIMARY` — set in `MONITORINFO::dwFlags` when this is
+    /// the primary display.
+    ///
+    /// Defined as `1` in Microsoft's WinUser.h. The `windows` 0.61 crate does
+    /// not currently re-export this constant, so we define it here from the
+    /// authoritative Win32 ABI value.
+    const MONITORINFOF_PRIMARY: u32 = 0x0000_0001;
 
     thread_local! {
         static COLLECT: RefCell<Vec<MonitorInfo>> = const { RefCell::new(Vec::new()) };
