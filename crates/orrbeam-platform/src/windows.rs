@@ -369,10 +369,11 @@ mod win32_monitors {
 
     use crate::{MonitorInfo, PlatformError};
     use std::cell::RefCell;
-    use windows::Win32::Foundation::{BOOL, LPARAM, RECT, TRUE};
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::{LPARAM, RECT, TRUE};
     use windows::Win32::Graphics::Gdi::{
-        DEVMODEW, DISPLAY_DEVICE_PRIMARY_DEVICE, ENUM_CURRENT_SETTINGS, EnumDisplayMonitors,
-        EnumDisplaySettingsW, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
+        DEVMODEW, ENUM_CURRENT_SETTINGS, EnumDisplayMonitors, EnumDisplaySettingsW,
+        GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITORINFOF_PRIMARY,
     };
 
     thread_local! {
@@ -403,8 +404,9 @@ mod win32_monitors {
             .unwrap_or(name_wide.len());
         let device_name = String::from_utf16_lossy(&name_wide[..name_len]);
 
-        let primary = (info_ex.monitorInfo.dwFlags & DISPLAY_DEVICE_PRIMARY_DEVICE)
-            == DISPLAY_DEVICE_PRIMARY_DEVICE;
+        // MONITORINFO.dwFlags can have MONITORINFOF_PRIMARY (= 1) set when
+        // the monitor is the primary display.
+        let primary = (info_ex.monitorInfo.dwFlags & MONITORINFOF_PRIMARY) == MONITORINFOF_PRIMARY;
 
         let rect = info_ex.monitorInfo.rcMonitor;
         let mut width = (rect.right - rect.left).max(0) as u32;
