@@ -51,11 +51,16 @@ fn windows_install_candidates(binary: &str) -> Vec<String> {
             out.push(format!(r"{root}\Sunshine\sunshine.exe"));
         }
     } else if lower.contains("moonlight") {
+        // The official MoonlightGameStreamingProject installer drops it at
+        // `Moonlight Game Streaming\Moonlight.exe` (no "Client" — that was
+        // an older name on the Github releases page).
         for root in [&program_files, &program_files_x86]
             .iter()
             .copied()
             .flatten()
         {
+            out.push(format!(r"{root}\Moonlight Game Streaming\Moonlight.exe"));
+            // Older "Client" suffixed install path (kept as fallback).
             out.push(format!(
                 r"{root}\Moonlight Game Streaming Client\Moonlight.exe"
             ));
@@ -486,11 +491,18 @@ mod tests {
             std::env::set_var("PROGRAMFILES", r"C:\Program Files");
         }
         let cands = windows_install_candidates("Moonlight.exe");
+        // Both the current path (no "Client") and the legacy path should appear.
+        assert!(
+            cands
+                .iter()
+                .any(|c| c.contains(r"Moonlight Game Streaming\Moonlight.exe")),
+            "current install path missing; got: {cands:?}"
+        );
         assert!(
             cands
                 .iter()
                 .any(|c| c.contains(r"Moonlight Game Streaming Client\Moonlight.exe")),
-            "got: {cands:?}"
+            "legacy install path missing; got: {cands:?}"
         );
     }
 
