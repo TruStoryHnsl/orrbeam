@@ -113,9 +113,13 @@ mod windows_impl {
             }
         }
 
-        // Step 2: grant the current user RW only.
+        // Step 2: grant the current user Modify rights only.
+        // (M) = Modify = R + W + D (delete) + write-attributes. Without D, a
+        // subsequent `std::fs::write` to the same path would fail with
+        // PermissionDenied because Windows treats file replacement as a
+        // delete-then-create. (R,W) alone is too restrictive in practice.
         match Command::new("icacls")
-            .args([path_str, "/grant:r", &format!("{principal}:(R,W)")])
+            .args([path_str, "/grant:r", &format!("{principal}:(M)")])
             .output()
         {
             Ok(out) if out.status.success() => {
