@@ -24,8 +24,8 @@
 
 #![warn(missing_docs)]
 
-use base64::engine::general_purpose::STANDARD_NO_PAD;
 use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD_NO_PAD;
 use ed25519_dalek::{Signature, Signer};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -299,7 +299,8 @@ mod tests {
     fn canonical_string_empty_body_contains_empty_hash() {
         const EMPTY_SHA256: &str =
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-        let canonical = build_canonical_string("GET", "/hello", 1700000000, "aabbcc", "abcd1234", b"");
+        let canonical =
+            build_canonical_string("GET", "/hello", 1700000000, "aabbcc", "abcd1234", b"");
         let s = String::from_utf8(canonical).unwrap();
         assert!(
             s.contains(EMPTY_SHA256),
@@ -309,8 +310,14 @@ mod tests {
 
     #[test]
     fn canonical_string_format() {
-        let canonical =
-            build_canonical_string("post", "/api/v1/foo", 1700000001, "nonce123", "key456", b"hello");
+        let canonical = build_canonical_string(
+            "post",
+            "/api/v1/foo",
+            1700000001,
+            "nonce123",
+            "key456",
+            b"hello",
+        );
         let s = String::from_utf8(canonical).unwrap();
         let lines: Vec<&str> = s.split('\n').collect();
         // 7 non-empty lines + trailing empty after final \n
@@ -338,9 +345,14 @@ mod tests {
         assert_eq!(headers.nonce.len(), 32);
         assert!(headers.nonce.chars().all(|c| c.is_ascii_hexdigit()));
         // timestamp is a valid integer
-        headers.timestamp.parse::<i64>().expect("timestamp must be an integer");
+        headers
+            .timestamp
+            .parse::<i64>()
+            .expect("timestamp must be an integer");
         // signature is valid base64 that decodes to 64 bytes
-        let sig_bytes = STANDARD_NO_PAD.decode(&headers.signature).expect("base64 decode");
+        let sig_bytes = STANDARD_NO_PAD
+            .decode(&headers.signature)
+            .expect("base64 decode");
         assert_eq!(sig_bytes.len(), 64, "Ed25519 signature must be 64 bytes");
     }
 
@@ -437,7 +449,10 @@ mod tests {
             &bad_sig,
         );
         assert!(
-            matches!(result, Err(WireError::InvalidSignature | WireError::BadSignature)),
+            matches!(
+                result,
+                Err(WireError::InvalidSignature | WireError::BadSignature)
+            ),
             "expected InvalidSignature or BadSignature for corrupted sig, got {result:?}"
         );
     }

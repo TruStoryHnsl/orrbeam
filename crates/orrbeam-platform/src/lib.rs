@@ -1,5 +1,14 @@
+//! Platform abstraction for Sunshine and Moonlight process management.
+//!
+//! Provides the [`Platform`] trait with OS-specific implementations for Linux,
+//! macOS, and Windows.  Use [`get_platform`] to obtain the correct implementation
+//! for the current target at runtime.
+
+#![warn(missing_docs)]
+
 mod common;
 mod detect;
+pub mod shared_control;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -10,17 +19,24 @@ mod windows;
 
 pub use detect::{GpuInfo, MonitorInfo, PlatformInfo, ServiceInfo, ServiceStatus};
 
+use std::sync::Arc;
+
 use orrbeam_core::Config;
 use thiserror::Error;
 
+/// Errors that can occur during platform operations (Sunshine / Moonlight process management).
 #[derive(Error, Debug)]
 pub enum PlatformError {
+    /// A spawned command returned a non-zero exit code or unexpected output.
     #[error("command failed: {0}")]
     Command(String),
+    /// The required binary was not found on PATH or at the configured path.
     #[error("binary not found: {0}")]
     NotFound(String),
+    /// An I/O error occurred while spawning or communicating with a process.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    /// The requested operation is not supported on this platform.
     #[error("unsupported platform")]
     Unsupported,
 }
@@ -71,18 +87,18 @@ pub trait Platform: Send + Sync {
 }
 
 /// Get the platform implementation for the current OS.
-pub fn get_platform() -> Box<dyn Platform> {
+pub fn get_platform() -> Arc<dyn Platform> {
     #[cfg(target_os = "linux")]
     {
-        Box::new(linux::LinuxPlatform::new())
+        Arc::new(linux::LinuxPlatform::new())
     }
     #[cfg(target_os = "macos")]
     {
-        Box::new(macos::MacOsPlatform::new())
+        Arc::new(macos::MacOsPlatform::new())
     }
     #[cfg(target_os = "windows")]
     {
-        Box::new(windows::WindowsPlatform::new())
+        Arc::new(windows::WindowsPlatform::new())
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {

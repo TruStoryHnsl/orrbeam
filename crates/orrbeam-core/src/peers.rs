@@ -208,12 +208,8 @@ impl TrustedPeerStore {
         let yaml = serde_yaml::to_string(self)?;
         std::fs::write(&path, &yaml)?;
 
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let perms = std::fs::Permissions::from_mode(0o600);
-            std::fs::set_permissions(&path, perms)?;
-        }
+        // Restrict file to owner only (chmod 0o600 on Unix; icacls on Windows).
+        crate::secure_file::restrict_to_owner(&path)?;
 
         Ok(())
     }
@@ -391,7 +387,9 @@ mod tests {
     #[test]
     fn upsert_replaces_existing() {
         let mut store = TrustedPeerStore::default();
-        store.upsert(make_peer("alpha", "aabbccdd11223344")).unwrap();
+        store
+            .upsert(make_peer("alpha", "aabbccdd11223344"))
+            .unwrap();
 
         let mut updated = make_peer("alpha", "aabbccdd11223344");
         updated.address = "10.0.0.99".to_string();
@@ -406,17 +404,24 @@ mod tests {
     #[test]
     fn upsert_rejects_fingerprint_collision() {
         let mut store = TrustedPeerStore::default();
-        store.upsert(make_peer("alice", "deadbeef01234567")).unwrap();
+        store
+            .upsert(make_peer("alice", "deadbeef01234567"))
+            .unwrap();
 
         let result = store.upsert(make_peer("bob", "deadbeef01234567"));
-        assert!(matches!(result, Err(PeersError::FingerprintCollision { .. })));
+        assert!(matches!(
+            result,
+            Err(PeersError::FingerprintCollision { .. })
+        ));
     }
 
     /// Removing a peer should also clean up the fingerprint index.
     #[test]
     fn remove_cleans_fingerprint_index() {
         let mut store = TrustedPeerStore::default();
-        store.upsert(make_peer("gamma", "1111222233334444")).unwrap();
+        store
+            .upsert(make_peer("gamma", "1111222233334444"))
+            .unwrap();
 
         let removed = store.remove("gamma");
         assert!(removed.is_some());
@@ -428,7 +433,9 @@ mod tests {
     #[test]
     fn by_fingerprint_lookup() {
         let mut store = TrustedPeerStore::default();
-        store.upsert(make_peer("delta", "ffffeeeeddddcccc")).unwrap();
+        store
+            .upsert(make_peer("delta", "ffffeeeeddddcccc"))
+            .unwrap();
 
         let found = store.by_fingerprint("ffffeeeeddddcccc");
         assert!(found.is_some());
@@ -450,7 +457,9 @@ mod tests {
     #[test]
     fn touch_last_seen_updates_timestamp() {
         let mut store = TrustedPeerStore::default();
-        store.upsert(make_peer("epsilon", "0123456789abcdef")).unwrap();
+        store
+            .upsert(make_peer("epsilon", "0123456789abcdef"))
+            .unwrap();
 
         assert!(store.get("epsilon").unwrap().last_seen_at.is_none());
 

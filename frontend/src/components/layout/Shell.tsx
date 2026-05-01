@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { usePlatformStore } from "@/stores/platform";
+import { SettingsDrawer } from "@/components/settings/SettingsDrawer";
 import orrbeamLogo from "@/assets/orrbeam-logo.png";
 
 const TRAY_NOTICE_KEY = "orrbeam-tray-notice-shown";
@@ -8,6 +9,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const identity = usePlatformStore((s) => s.identity);
   const info = usePlatformStore((s) => s.info);
   const [showTrayNotice, setShowTrayNotice] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     // Listen for the window close event to show a one-time tray notice
@@ -43,34 +45,31 @@ export function Shell({ children }: { children: ReactNode }) {
       {/* Title bar */}
       <header className="flex items-center justify-between px-4 py-2 bg-surface-1 border-b border-surface-3">
         <div className="flex items-center gap-3">
-          <img
-            src={orrbeamLogo}
-            alt=""
-            className="h-7 w-auto object-contain"
-          />
+          <img src={orrbeamLogo} alt="" className="h-7 w-auto object-contain" />
           <h1 className="text-lg font-semibold tracking-tight">
             <span className="text-sunshine">Orr</span>
             <span className="text-white">beam</span>
           </h1>
-          {info && (
-            <span className="text-xs text-neutral-500">
-              {info.hostname}
-            </span>
-          )}
+          {info && <span className="text-xs text-neutral-500">{info.hostname}</span>}
         </div>
         <div className="flex items-center gap-3">
           {identity && (
-            <span className="text-xs text-neutral-500 font-mono">
-              {identity.fingerprint}
-            </span>
+            <span className="text-xs text-neutral-500 font-mono">{identity.fingerprint}</span>
           )}
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="rounded border border-surface-3 px-3 py-1 text-xs font-medium text-neutral-300 transition-colors hover:bg-surface-2"
+          >
+            Settings
+          </button>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="flex flex-col flex-1 overflow-hidden">
-        {children}
-      </main>
+      <main className="flex flex-col flex-1 overflow-hidden">{children}</main>
+
+      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

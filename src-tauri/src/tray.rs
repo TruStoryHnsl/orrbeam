@@ -1,18 +1,23 @@
 use crate::AppState;
 use orrbeam_platform::ServiceStatus;
 use tauri::{
+    App, AppHandle, Manager, Wry,
     image::Image,
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    App, AppHandle, Manager, Wry,
 };
 
 /// Create the system tray icon with an initial menu.
 pub fn create_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let toggle = MenuItem::with_id(app, "toggle_visibility", "Hide Orrbeam", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
-    let sunshine_status =
-        MenuItem::with_id(app, "sunshine_status", "\u{2600} Sunshine: --", false, None::<&str>)?;
+    let sunshine_status = MenuItem::with_id(
+        app,
+        "sunshine_status",
+        "\u{2600} Sunshine: --",
+        false,
+        None::<&str>,
+    )?;
     let moonlight_status = MenuItem::with_id(
         app,
         "moonlight_status",
@@ -21,13 +26,8 @@ pub fn create_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
         None::<&str>,
     )?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let connect_header = MenuItem::with_id(
-        app,
-        "connect_header",
-        "Connect to...",
-        false,
-        None::<&str>,
-    )?;
+    let connect_header =
+        MenuItem::with_id(app, "connect_header", "Connect to...", false, None::<&str>)?;
     let sep3 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
@@ -106,14 +106,12 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
                     None
                 }
             };
-            if let Some(config) = platform_status {
-                if let Err(e) =
-                    state
-                        .platform
-                        .start_moonlight(&config, address, "Desktop", false, None)
-                {
-                    tracing::error!("failed to connect to {address}: {e}");
-                }
+            if let Some(config) = platform_status
+                && let Err(e) = state
+                    .platform
+                    .start_moonlight(&config, address, "Desktop", false, None)
+            {
+                tracing::error!("failed to connect to {address}: {e}");
             }
         }
         _ => {}
@@ -176,14 +174,24 @@ fn refresh_tray_inner(app_handle: &AppHandle) -> Result<(), Box<dyn std::error::
     // Build menu items
     let mut items: Vec<Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>> = Vec::new();
 
-    let toggle =
-        MenuItem::with_id(app_handle, "toggle_visibility", toggle_label, true, None::<&str>)?;
+    let toggle = MenuItem::with_id(
+        app_handle,
+        "toggle_visibility",
+        toggle_label,
+        true,
+        None::<&str>,
+    )?;
     items.push(Box::new(toggle));
 
     items.push(Box::new(PredefinedMenuItem::separator(app_handle)?));
 
-    let sun =
-        MenuItem::with_id(app_handle, "sunshine_status", &sunshine_label, false, None::<&str>)?;
+    let sun = MenuItem::with_id(
+        app_handle,
+        "sunshine_status",
+        &sunshine_label,
+        false,
+        None::<&str>,
+    )?;
     items.push(Box::new(sun));
 
     let moon = MenuItem::with_id(

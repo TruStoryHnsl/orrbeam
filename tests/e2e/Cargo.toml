@@ -1,0 +1,9 @@
+[package]
+name = "orrbeam-e2e"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "orrbeam_e2e"
+
+[dev-dependencies]

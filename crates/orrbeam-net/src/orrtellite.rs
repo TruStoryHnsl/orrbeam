@@ -1,3 +1,5 @@
+//! Headscale (orrtellite) mesh node discovery via polling the Headscale API.
+
 use orrbeam_core::node::{DiscoverySource, Node, NodeRegistry, NodeState};
 use serde::Deserialize;
 use std::net::IpAddr;
@@ -53,6 +55,8 @@ pub async fn poll(
                             moonlight_available: false,
                             os: None,
                             encoder: None,
+                            cert_sha256: None,
+                            last_seen: None,
                         });
                     }
                 }

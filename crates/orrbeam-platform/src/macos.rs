@@ -1,5 +1,7 @@
-use crate::common::{resolve_binary, stop_tracked, store_child, ChildSlot};
-use crate::{GpuInfo, MonitorInfo, Platform, PlatformError, PlatformInfo, ServiceInfo, ServiceStatus};
+use crate::common::{ChildSlot, resolve_binary, stop_tracked, store_child};
+use crate::{
+    GpuInfo, MonitorInfo, Platform, PlatformError, PlatformInfo, ServiceInfo, ServiceStatus,
+};
 use orrbeam_core::Config;
 use std::process::Command;
 
@@ -161,10 +163,7 @@ impl Platform for MacOsPlatform {
     }
 
     fn monitors(&self) -> Result<Vec<MonitorInfo>, PlatformError> {
-        let output = Self::run(
-            "system_profiler",
-            &["SPDisplaysDataType", "-json"],
-        )?;
+        let output = Self::run("system_profiler", &["SPDisplaysDataType", "-json"])?;
 
         // Basic parsing — extract display names
         let monitors = vec![MonitorInfo {
@@ -203,10 +202,7 @@ impl Platform for MacOsPlatform {
     }
 
     fn gpu_info(&self) -> Result<GpuInfo, PlatformError> {
-        let output = Self::run(
-            "system_profiler",
-            &["SPDisplaysDataType"],
-        )?;
+        let output = Self::run("system_profiler", &["SPDisplaysDataType"])?;
 
         let name = output
             .lines()

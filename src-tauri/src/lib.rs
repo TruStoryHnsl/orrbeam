@@ -1,28 +1,114 @@
 mod commands;
+pub mod error;
 mod tray;
+
+pub use error::AppError;
 
 use orrbeam_core::{Config, Identity, NodeRegistry};
 use orrbeam_net::DiscoveryManager;
 use orrbeam_platform::get_platform;
-use std::sync::Arc;
-use tauri::Manager;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use tauri::{Emitter, Manager};
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 
 /// Shared application state accessible from all Tauri commands.
 pub struct AppState {
     pub config: Arc<RwLock<Config>>,
-    pub identity: Identity,
+    pub identity: Arc<Identity>,
     pub registry: Arc<RwLock<NodeRegistry>>,
-    pub platform: Box<dyn orrbeam_platform::Platform>,
+    pub platform: Arc<dyn orrbeam_platform::Platform + Send + Sync>,
+    pub tls: Arc<orrbeam_core::tls::TlsIdentity>,
+    pub peers: Arc<RwLock<orrbeam_core::peers::TrustedPeerStore>>,
+    /// In-flight mutual-trust TOFU requests keyed by UUID.
+    ///
+    /// This `Arc` is shared with [`orrbeam_net::server::ControlState`] so that
+    /// the server's inbound-request handlers and the Tauri command layer both
+    /// read/write the same map.
+    pub pending_mutual_trust:
+        Arc<RwLock<std::collections::HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>>,
+    /// Active shared-control session, if any.
+    ///
+    /// This `Arc` is shared with [`orrbeam_net::server::ControlState`] so that
+    /// the HTTP control server's join endpoint and the Tauri command layer both
+    /// operate on the same live session.
+    pub shared_control: Arc<
+        Mutex<
+            Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>,
+        >,
+    >,
+    pub control_shutdown: CancellationToken,
 }
+
+// ---------------------------------------------------------------------------
+// TauriEventEmitter — forwards control-plane events to the frontend
+// ---------------------------------------------------------------------------
+
+struct TauriEventEmitter {
+    handle: tauri::AppHandle,
+}
+
+#[async_trait::async_trait]
+impl orrbeam_net::server::EventEmitter for TauriEventEmitter {
+    async fn emit(&self, topic: &str, payload: serde_json::Value) {
+        if let Err(e) = self.handle.emit(topic, payload) {
+            tracing::warn!(topic, "failed to emit tauri event: {e}");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// run()
+// ---------------------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        "orrbeam=info,orrbeam_app=info,orrbeam_core=info,orrbeam_net=info,orrbeam_platform=info"
+            .into()
+    });
+
+    // In packaged release builds, also write a rolling log file.
+    #[cfg(not(debug_assertions))]
+    {
+        use std::path::PathBuf;
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+
+        // Pick a per-platform log directory:
+        // - Linux:   $XDG_STATE_HOME/orrbeam/logs   (default ~/.local/state/orrbeam/logs)
+        // - macOS:   ~/Library/Application Support/orrbeam/logs (state_dir is None on macOS)
+        // - Windows: %LOCALAPPDATA%\orrbeam\logs
+        // dirs::state_dir() returns None on Windows and macOS, so fall back to
+        // data_local_dir() (LOCALAPPDATA on Windows, ~/Library/App Support on macOS).
+        let log_dir: PathBuf = dirs::state_dir()
+            .or_else(dirs::data_local_dir)
+            .or_else(dirs::home_dir)
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("orrbeam")
+            .join("logs");
+        let _ = std::fs::create_dir_all(&log_dir);
+        let file_appender = tracing_appender::rolling::daily(&log_dir, "orrbeam.log");
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+        // Leak the guard so the background thread lives for the process lifetime.
+        Box::leak(Box::new(_guard));
+
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .with_writer(non_blocking),
+            )
+            .with(tracing_subscriber::fmt::layer().pretty())
+            .init();
+    }
+
+    #[cfg(debug_assertions)]
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "orrbeam=info".into()),
-        )
+        .with_env_filter(env_filter)
+        .pretty()
         .init();
 
     let config = Config::load().unwrap_or_else(|e| {
@@ -30,30 +116,115 @@ pub fn run() {
         Config::default()
     });
 
-    let identity = Identity::load_or_create().expect("failed to initialize identity");
+    let identity = Arc::new(Identity::load_or_create().expect("failed to initialize identity"));
     tracing::info!("node identity: {}", identity.fingerprint());
 
-    let registry = Arc::new(RwLock::new(NodeRegistry::new()));
+    // Load TLS identity (cert derived from Ed25519 key).
+    let tls = Arc::new(
+        orrbeam_core::tls::TlsIdentity::load_or_create(&identity, &config.node_name)
+            .expect("failed to initialize TLS identity"),
+    );
+    tracing::info!(cert_sha256 = %tls.cert_sha256_hex, "TLS identity ready");
+
+    // Load trusted peer store.
+    let peers = Arc::new(RwLock::new(
+        orrbeam_core::peers::TrustedPeerStore::load().unwrap_or_else(|e| {
+            tracing::warn!("failed to load trusted peers, starting fresh: {e}");
+            orrbeam_core::peers::TrustedPeerStore::default()
+        }),
+    ));
+
+    // Cancellation token used to stop the control server on app exit.
+    let control_shutdown = CancellationToken::new();
+
+    // Shared map for in-flight mutual-trust TOFU requests.  The same Arc is
+    // given to both AppState (for Tauri commands) and ControlState (for the
+    // HTTP server inbound handler) so they always operate on the same data.
+    let pending_mutual_trust: Arc<
+        RwLock<HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>,
+    > = Arc::new(RwLock::new(HashMap::new()));
+
+    // Load the persistent registry from disk; fall back to empty on first run.
+    let registry = Arc::new(RwLock::new(NodeRegistry::load().unwrap_or_else(|e| {
+        tracing::warn!("failed to load node registry, starting fresh: {e}");
+        NodeRegistry::new()
+    })));
     let platform = get_platform();
+    let config_arc = Arc::new(RwLock::new(config.clone()));
+
+    // Shared-control session — shared between AppState (Tauri commands) and
+    // ControlState (HTTP server join endpoint) via the same Arc.
+    let shared_control: Arc<
+        Mutex<
+            Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>,
+        >,
+    > = Arc::new(Mutex::new(None));
 
     let state = AppState {
-        config: Arc::new(RwLock::new(config.clone())),
-        identity,
+        config: config_arc.clone(),
+        identity: identity.clone(),
         registry: registry.clone(),
-        platform,
+        platform: platform.clone(),
+        tls: tls.clone(),
+        peers: peers.clone(),
+        pending_mutual_trust: pending_mutual_trust.clone(),
+        shared_control: shared_control.clone(),
+        control_shutdown: control_shutdown.clone(),
     };
 
-    // Start discovery in background
-    let discovery_config = config.clone();
-    let discovery_registry = registry.clone();
-    tauri::async_runtime::spawn(async move {
-        let manager = DiscoveryManager::new(discovery_config, discovery_registry);
-        if let Err(e) = manager.start().await {
-            tracing::error!("discovery failed to start: {e}");
-        }
-    });
+    // Start discovery in background.
+    {
+        let discovery_config = config.clone();
+        let discovery_registry = registry.clone();
+        let discovery_identity = identity.clone();
+        let discovery_tls = tls.clone();
+        let discovery_platform = platform.clone();
+        let api_port = config.api_port;
 
-    tauri::Builder::default()
+        tauri::async_runtime::spawn(async move {
+            let gpu_encoder = discovery_platform.gpu_info().ok().map(|g| g.encoder);
+            let os = discovery_platform.info().os;
+            let sunshine_available = discovery_platform
+                .sunshine_status(&discovery_config)
+                .map(|s| {
+                    matches!(
+                        s.status,
+                        orrbeam_platform::ServiceStatus::Running
+                            | orrbeam_platform::ServiceStatus::Installed
+                    )
+                })
+                .unwrap_or(false);
+            let moonlight_available = discovery_platform
+                .moonlight_status(&discovery_config)
+                .map(|s| {
+                    matches!(
+                        s.status,
+                        orrbeam_platform::ServiceStatus::Running
+                            | orrbeam_platform::ServiceStatus::Installed
+                    )
+                })
+                .unwrap_or(false);
+
+            let reg_info = orrbeam_net::RegistrationInfo {
+                fingerprint: discovery_identity.fingerprint(),
+                cert_sha256: discovery_tls.cert_sha256_hex.clone(),
+                sunshine_available,
+                moonlight_available,
+                os,
+                encoder: gpu_encoder,
+                port: api_port,
+            };
+
+            let mut manager = DiscoveryManager::new(discovery_config, discovery_registry);
+            if let Err(e) = manager.start(Some(reg_info)).await {
+                tracing::error!("discovery failed to start: {e}");
+            }
+        });
+    }
+
+    // Build the Tauri application.  The control server is spawned inside
+    // .setup() so that we have an AppHandle for TauriEventEmitter.
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
@@ -71,13 +242,87 @@ pub fn run() {
             commands::moonlight::stop_moonlight,
             commands::pairing::pair_initiate,
             commands::pairing::pair_accept,
+            commands::remote::list_trusted_peers,
+            commands::remote::fetch_peer_hello,
+            commands::remote::confirm_trusted_peer,
+            commands::remote::remove_trusted_peer,
+            commands::remote::update_peer_permissions,
+            commands::remote::request_mutual_trust,
+            commands::remote::approve_mutual_trust_request,
+            commands::remote::reject_mutual_trust_request,
+            commands::remote::list_inbound_mutual_trust_requests,
+            commands::remote::connect_to_peer,
+            commands::remote::remote_peer_status,
             commands::discovery::get_nodes,
             commands::discovery::get_node_count,
+            commands::discovery::add_node,
+            commands::discovery::remove_node,
+            commands::discovery::list_nodes,
             commands::settings::get_config,
             commands::settings::save_config,
             commands::settings::get_identity,
+            commands::settings::get_tls_fingerprint,
+            commands::shared_control::start_shared_control,
+            commands::shared_control::stop_shared_control,
+            commands::shared_control::add_sc_participant,
+            commands::shared_control::remove_sc_participant,
+            commands::shared_control::list_sc_participants,
         ])
         .setup(|app| {
+            let app_state = app.state::<AppState>();
+
+            // Build a TauriEventEmitter now that we have an AppHandle.
+            let emitter = Arc::new(TauriEventEmitter {
+                handle: app.handle().clone(),
+            });
+
+            // Build ControlState with all required fields.
+            // `pending_mutual_trust` is the *same* Arc held in AppState so that
+            // the HTTP server and Tauri commands share the live request map.
+            let control_state = Arc::new(orrbeam_net::server::ControlState {
+                identity: app_state.identity.clone(),
+                tls: app_state.tls.clone(),
+                config: app_state.config.clone(),
+                peers: app_state.peers.clone(),
+                nonces: orrbeam_net::server::NonceCache::new(),
+                pending_mutual_trust: app_state.pending_mutual_trust.clone(),
+                platform: app_state.platform.clone(),
+                shared_control: app_state.shared_control.clone(),
+                event_emitter: emitter,
+                shutdown: app_state.control_shutdown.clone(),
+                ip_tofu_attempts: Arc::new(tokio::sync::RwLock::new(
+                    std::collections::HashMap::new(),
+                )),
+            });
+
+            // Determine bind address from config.
+            let bind_addr: std::net::SocketAddr = {
+                let cfg = app_state.config.try_read().expect("config locked in setup");
+                format!("{}:{}", cfg.api_bind, cfg.api_port)
+                    .parse()
+                    .expect("invalid api_bind:api_port in config")
+            };
+
+            // Spawn the control server (and its nonce GC task) in the Tauri
+            // async runtime.
+            //
+            // NOTE: `NonceCache::spawn_gc` uses bare `tokio::spawn`, which
+            // requires a Tokio runtime in thread-local context. Tauri's
+            // `.setup()` closure runs on the main thread *without* that
+            // context, so calling `spawn_gc` here directly panics with
+            // "there is no reactor running". We therefore spawn the GC from
+            // inside the async block below, where the runtime context is
+            // guaranteed to be active.
+            let server_state = control_state;
+            let gc_shutdown = app_state.control_shutdown.clone();
+            tauri::async_runtime::spawn(async move {
+                server_state.nonces.clone().spawn_gc(gc_shutdown);
+                tracing::info!(%bind_addr, "control server starting");
+                if let Err(e) = orrbeam_net::server::serve(server_state, bind_addr).await {
+                    tracing::error!("control server exited: {e}");
+                }
+            });
+
             tray::create_tray(app)?;
             tray::spawn_tray_updater(app.handle().clone());
             Ok(())
@@ -89,6 +334,14 @@ pub fn run() {
                 tray::refresh_tray(window.app_handle());
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running orrbeam");
+        .build(tauri::generate_context!())
+        .expect("error building orrbeam");
+
+    // Run the event loop.  Cancel the shutdown token on exit so the control
+    // server drains cleanly.
+    app.run(move |_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            control_shutdown.cancel();
+        }
+    });
 }
