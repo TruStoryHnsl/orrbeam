@@ -62,12 +62,8 @@ impl Identity {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(&path, self.signing_key.to_bytes())?;
-        // Restrict permissions on Unix
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-        }
+        // Restrict file to owner only (chmod 0o600 on Unix; icacls on Windows).
+        crate::secure_file::restrict_to_owner(&path)?;
         Ok(())
     }
 

@@ -88,8 +88,99 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-# TODO: cargo tauri build matrix (Linux/macOS/Windows)
-# Needs self-hosted runners with displays (Xvfb on Linux,
-# macOS GUI runner, Windows runner).
-# Tauri action: tauri-apps/tauri-action@v0
-# Stub until runners are provisioned.
+  build-windows:
+    name: Build (windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: >-
+            ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Cargo fmt check
+        run: cargo fmt --all -- --check
+
+      - name: Cargo clippy (workspace)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Cargo test
+        run: cargo test --workspace
+
+      - name: Cargo build release
+        run: cargo build --workspace --release
+
+      - name: Tauri build (MSI + NSIS)
+        run: |
+          cargo install tauri-cli --version "^2" --locked
+          cargo tauri build
+
+      - name: Upload Windows installers
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orrbeam-windows-installers
+          path: |
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+  build-macos:
+    name: Build (macos)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: >-
+            ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cargo build
+        run: cargo build --workspace
+
+      - name: Cargo test
+        run: cargo test --workspace

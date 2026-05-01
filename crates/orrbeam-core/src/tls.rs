@@ -215,12 +215,8 @@ impl TlsIdentity {
         std::fs::write(cert_path, &cert_pem)?;
         std::fs::write(key_path, &key_pem)?;
 
-        // Restrict key file permissions on Unix (0o600).
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(key_path, std::fs::Permissions::from_mode(0o600))?;
-        }
+        // Restrict the key file to owner only (chmod 0o600 on Unix; icacls on Windows).
+        crate::secure_file::restrict_to_owner(key_path)?;
 
         info!(
             fingerprint = %cert_sha256_hex,
@@ -275,30 +271,39 @@ impl TlsIdentity {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use super::*;
+    #[cfg(unix)]
     use crate::identity::Identity;
+    #[cfg(unix)]
     use std::env;
+    #[cfg(unix)]
     use std::sync::{Arc, Mutex};
+    #[cfg(unix)]
     use tempfile::TempDir;
 
     /// Serialize all tests that touch the process-global `XDG_DATA_HOME` env var.
     /// Without this, parallel test threads race on `set_var` and one test may
     /// read another test's (already-dropped) temp directory.
+    #[cfg(unix)]
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     /// Override the XDG_DATA_HOME env var so that `dirs::data_local_dir()` returns
     /// our temp directory, isolating tests from the real user data dir.
+    #[cfg(unix)]
     fn with_temp_data_dir(tmp: &TempDir) {
         // Safety: test-only; caller holds ENV_LOCK.
         unsafe { env::set_var("XDG_DATA_HOME", tmp.path()) };
     }
 
+    #[cfg(unix)]
     fn make_identity() -> Identity {
         Identity::generate().expect("identity generation failed")
     }
 
     // ── generate cert + stable fingerprint ───────────────────────────────────
 
+    #[cfg(unix)]
     #[test]
     fn test_generate_cert_and_stable_fingerprint() {
         let _lock = ENV_LOCK.lock().unwrap();
@@ -328,7 +333,19 @@ mod tests {
     }
 
     // ── idempotency: calling twice gives the same cert ────────────────────────
+    //
+    // The next three tests use `with_temp_data_dir` to redirect
+    // `dirs::data_local_dir()` via `XDG_DATA_HOME`. That env override is
+    // honoured on Linux (the dirs crate's xdg branch) but ignored on Windows
+    // (SHGetKnownFolderPath always wins) and partially on macOS. The tests
+    // are therefore Unix-only — Windows test runs hit the real
+    // `%LOCALAPPDATA%\orrbeam\identity\` dir, which is shared with the
+    // running app and produces ACL/state contention. Production behaviour
+    // on Windows is covered by the on-host verification protocol in
+    // `docs/verifying_control_plane.md` (load_or_create on a real win11
+    // node both creates and reloads the same cert across orrbeam restarts).
 
+    #[cfg(unix)]
     #[test]
     fn test_load_or_create_is_idempotent() {
         let _lock = ENV_LOCK.lock().unwrap();
@@ -352,6 +369,7 @@ mod tests {
 
     // ── rustls_server_config succeeds ─────────────────────────────────────────
 
+    #[cfg(unix)]
     #[test]
     fn test_rustls_server_config_succeeds() {
         let _lock = ENV_LOCK.lock().unwrap();
@@ -376,6 +394,7 @@ mod tests {
 
     // ── Arc<ServerConfig> — config can be shared across threads ──────────────
 
+    #[cfg(unix)]
     #[test]
     fn test_rustls_server_config_is_send_sync() {
         let _lock = ENV_LOCK.lock().unwrap();

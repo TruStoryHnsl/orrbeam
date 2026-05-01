@@ -208,12 +208,8 @@ impl TrustedPeerStore {
         let yaml = serde_yaml::to_string(self)?;
         std::fs::write(&path, &yaml)?;
 
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let perms = std::fs::Permissions::from_mode(0o600);
-            std::fs::set_permissions(&path, perms)?;
-        }
+        // Restrict file to owner only (chmod 0o600 on Unix; icacls on Windows).
+        crate::secure_file::restrict_to_owner(&path)?;
 
         Ok(())
     }
