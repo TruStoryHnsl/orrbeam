@@ -5,6 +5,20 @@
 //! response shapes.
 //!
 //! Real-hardware tests (mDNS, actual peer-to-peer) are marked `#[ignore]`.
+//!
+//! ## Platform note
+//!
+//! The whole suite redirects orrbeam's TLS / config dirs via `XDG_DATA_HOME`
+//! so each test gets isolated state. That env override is honoured on Linux
+//! (and macOS for some paths) but is ignored on Windows
+//! (`SHGetKnownFolderPath` always wins for `LOCALAPPDATA`). On Windows the
+//! tests would collide on the real `%LOCALAPPDATA%\orrbeam\` directory and
+//! produce flaky PermissionDenied + poisoned-mutex failures. The whole
+//! file is therefore gated to `cfg(unix)`. Production server-on-Windows
+//! behaviour is verified by the on-host protocol in
+//! `docs/verifying_control_plane.md`.
+
+#![cfg(unix)]
 
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener};

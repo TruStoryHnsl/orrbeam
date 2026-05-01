@@ -19,6 +19,8 @@ use crate::error::AppError;
 /// On platforms other than Linux this returns `AppError::Unsupported`.
 #[tauri::command]
 pub async fn start_shared_control(state: State<'_, AppState>) -> Result<(), AppError> {
+    // `mut` is only consumed by the cfg(target_os = "linux") branch below.
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
     let mut guard = state
         .shared_control
         .lock()

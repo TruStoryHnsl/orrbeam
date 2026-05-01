@@ -51,11 +51,16 @@ fn windows_install_candidates(binary: &str) -> Vec<String> {
             out.push(format!(r"{root}\Sunshine\sunshine.exe"));
         }
     } else if lower.contains("moonlight") {
+        // The official MoonlightGameStreamingProject installer drops it at
+        // `Moonlight Game Streaming\Moonlight.exe` (no "Client" — that was
+        // an older name on the Github releases page).
         for root in [&program_files, &program_files_x86]
             .iter()
             .copied()
             .flatten()
         {
+            out.push(format!(r"{root}\Moonlight Game Streaming\Moonlight.exe"));
+            // Older "Client" suffixed install path (kept as fallback).
             out.push(format!(
                 r"{root}\Moonlight Game Streaming Client\Moonlight.exe"
             ));
@@ -364,11 +369,20 @@ mod win32_monitors {
 
     use crate::{MonitorInfo, PlatformError};
     use std::cell::RefCell;
-    use windows::Win32::Foundation::{BOOL, LPARAM, RECT, TRUE};
+    use windows::Win32::Foundation::{LPARAM, RECT, TRUE};
     use windows::Win32::Graphics::Gdi::{
-        DEVMODEW, DISPLAY_DEVICE_PRIMARY_DEVICE, ENUM_CURRENT_SETTINGS, EnumDisplayMonitors,
-        EnumDisplaySettingsW, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
+        DEVMODEW, ENUM_CURRENT_SETTINGS, EnumDisplayMonitors, EnumDisplaySettingsW,
+        GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
     };
+    use windows::core::BOOL;
+
+    /// `MONITORINFOF_PRIMARY` — set in `MONITORINFO::dwFlags` when this is
+    /// the primary display.
+    ///
+    /// Defined as `1` in Microsoft's WinUser.h. The `windows` 0.61 crate does
+    /// not currently re-export this constant, so we define it here from the
+    /// authoritative Win32 ABI value.
+    const MONITORINFOF_PRIMARY: u32 = 0x0000_0001;
 
     thread_local! {
         static COLLECT: RefCell<Vec<MonitorInfo>> = const { RefCell::new(Vec::new()) };
@@ -398,8 +412,9 @@ mod win32_monitors {
             .unwrap_or(name_wide.len());
         let device_name = String::from_utf16_lossy(&name_wide[..name_len]);
 
-        let primary = (info_ex.monitorInfo.dwFlags & DISPLAY_DEVICE_PRIMARY_DEVICE)
-            == DISPLAY_DEVICE_PRIMARY_DEVICE;
+        // MONITORINFO.dwFlags can have MONITORINFOF_PRIMARY (= 1) set when
+        // the monitor is the primary display.
+        let primary = (info_ex.monitorInfo.dwFlags & MONITORINFOF_PRIMARY) == MONITORINFOF_PRIMARY;
 
         let rect = info_ex.monitorInfo.rcMonitor;
         let mut width = (rect.right - rect.left).max(0) as u32;
@@ -486,11 +501,18 @@ mod tests {
             std::env::set_var("PROGRAMFILES", r"C:\Program Files");
         }
         let cands = windows_install_candidates("Moonlight.exe");
+        // Both the current path (no "Client") and the legacy path should appear.
+        assert!(
+            cands
+                .iter()
+                .any(|c| c.contains(r"Moonlight Game Streaming\Moonlight.exe")),
+            "current install path missing; got: {cands:?}"
+        );
         assert!(
             cands
                 .iter()
                 .any(|c| c.contains(r"Moonlight Game Streaming Client\Moonlight.exe")),
-            "got: {cands:?}"
+            "legacy install path missing; got: {cands:?}"
         );
     }
 
