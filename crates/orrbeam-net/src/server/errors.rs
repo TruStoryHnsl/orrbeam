@@ -6,9 +6,9 @@
 
 #![warn(missing_docs)]
 
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::Serialize;
 
 // ---------------------------------------------------------------------------
@@ -60,6 +60,8 @@ pub enum ControlError {
     TofuPending,
     /// The mutual-trust request was not found or has expired.
     TofuExpired,
+    /// The shared-control session is not active on this node.
+    SharedControlUnavailable,
 }
 
 impl IntoResponse for ControlError {
@@ -91,16 +93,8 @@ impl IntoResponse for ControlError {
                 "nonce already used".into(),
             ),
             Self::Forbidden(m) => (StatusCode::FORBIDDEN, "forbidden", m.clone()),
-            Self::InvalidBody(m) => (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "invalid_body",
-                m.clone(),
-            ),
-            Self::Internal(m) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-                m.clone(),
-            ),
+            Self::InvalidBody(m) => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_body", m.clone()),
+            Self::Internal(m) => (StatusCode::INTERNAL_SERVER_ERROR, "internal", m.clone()),
             Self::SunshineUnreachable => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "sunshine_unreachable",
@@ -130,6 +124,11 @@ impl IntoResponse for ControlError {
                 StatusCode::GONE,
                 "tofu_expired",
                 "mutual trust request has expired".into(),
+            ),
+            Self::SharedControlUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "shared_control_unavailable",
+                "shared-control session is not active".into(),
             ),
         };
 
@@ -289,6 +288,7 @@ mod tests {
             ControlError::RateLimited,
             ControlError::TofuPending,
             ControlError::TofuExpired,
+            ControlError::SharedControlUnavailable,
         ];
 
         for err in variants {
@@ -296,8 +296,7 @@ mod tests {
             let body = axum::body::to_bytes(resp.into_body(), 4096)
                 .await
                 .expect("body bytes");
-            let v: serde_json::Value =
-                serde_json::from_slice(&body).expect("must be valid JSON");
+            let v: serde_json::Value = serde_json::from_slice(&body).expect("must be valid JSON");
             assert!(v["error"].is_string(), "missing 'error' key");
             assert!(v["message"].is_string(), "missing 'message' key");
         }

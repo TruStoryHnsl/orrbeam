@@ -49,8 +49,8 @@ use tracing::{debug, warn};
 use orrbeam_core::identity::Identity;
 use orrbeam_core::peers::TrustedPeer;
 use orrbeam_core::wire::{
-    sign_request, HelloPayload, HEADER_KEY_ID, HEADER_NONCE, HEADER_SIGNATURE, HEADER_TIMESTAMP,
-    HEADER_VERSION,
+    HEADER_KEY_ID, HEADER_NONCE, HEADER_SIGNATURE, HEADER_TIMESTAMP, HEADER_VERSION, HelloPayload,
+    sign_request,
 };
 
 pub use errors::ClientError;
@@ -234,20 +234,16 @@ impl ControlClient {
         let url = format!("https://{address}:{port}/v1/hello");
         debug!(url = %url, "bootstrap_hello: sending TOFU request");
 
-        let response = http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_connect() || e.is_timeout() {
-                    ClientError::Unreachable {
-                        address: address.to_string(),
-                        port,
-                    }
-                } else {
-                    ClientError::Http(e)
+        let response = http.get(&url).send().await.map_err(|e| {
+            if e.is_connect() || e.is_timeout() {
+                ClientError::Unreachable {
+                    address: address.to_string(),
+                    port,
                 }
-            })?;
+            } else {
+                ClientError::Http(e)
+            }
+        })?;
 
         let status = response.status();
         if !status.is_success() {
@@ -397,11 +393,12 @@ impl ControlClient {
                 }
             }
         }
-        warn!(
-            op = op_name,
-            max_attempts, "all retry attempts exhausted"
-        );
-        Err(last_err.expect("loop ran at least once"))
+        warn!(op = op_name, max_attempts, "all retry attempts exhausted");
+        Err(last_err.unwrap_or_else(|| {
+            ClientError::InvalidResponse(
+                "retry loop ran zero iterations — max_attempts must be >= 1".into(),
+            )
+        }))
     }
 
     // ── Public typed methods ──────────────────────────────────────────────────

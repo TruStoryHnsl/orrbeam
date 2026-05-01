@@ -1,0 +1,84 @@
+name: Bug report
+description: Report a reproducible problem in orrbeam
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please include enough detail that someone else
+        can reproduce the failure on their machine.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing the problem.
+      placeholder: "Connect (remote) on a trusted peer never launches Moonlight."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you think would happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Include error dialogs or status text verbatim.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Numbered steps. Start from a clean state.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: input
+    id: orrbeam-version
+    attributes:
+      label: orrbeam version
+      description: Output of `cargo pkgid` or the value shown in About, plus commit SHA if running from source.
+      placeholder: "0.1.0 / commit abc1234"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS / GPU
+      description: OS distribution + version, GPU model + driver if relevant.
+      placeholder: "CachyOS, kernel 6.10, NVIDIA 555.58 / RTX 3070"
+    validations:
+      required: true
+  - type: input
+    id: sunshine-version
+    attributes:
+      label: Sunshine version
+      placeholder: "0.23.1"
+  - type: input
+    id: moonlight-version
+    attributes:
+      label: Moonlight version
+      placeholder: "moonlight-qt 5.0.1"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Relevant logs. Default locations:
+        - Linux release: `~/.local/state/orrbeam/orrbeam.log`
+        - Dev: stdout from `cargo tauri dev` (set `RUST_LOG=orrbeam=debug` for verbose)
+        Sanitize any tokens or peer fingerprints you don't want public.
+      render: shell
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots are not required and not preferred. Text is fine.

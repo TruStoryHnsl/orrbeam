@@ -16,12 +16,12 @@ export default {
         // This is the ORRBEAM app chrome. The sunshine/moonlight
         // sub-brands below remain the per-pane semantic colors.
         brand: {
-          DEFAULT: "#F8D808",   // Beacon Gold
-          primary: "#F8D808",   // Beacon Gold
+          DEFAULT: "#F8D808", // Beacon Gold
+          primary: "#F8D808", // Beacon Gold
           highlight: "#887808", // Brass Helm
-          mid: "#787808",       // Worn Brass
-          deep: "#786808",      // Aged Brass
-          shadow: "#685808",    // Dark Patina
+          mid: "#787808", // Worn Brass
+          deep: "#786808", // Aged Brass
+          shadow: "#685808", // Dark Patina
         },
         sunshine: {
           DEFAULT: "#ff8c00",

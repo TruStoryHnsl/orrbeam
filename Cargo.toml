@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/orrbeam-core", "crates/orrbeam-net", "crates/orrbeam-platform", "src-tauri"]
+members = ["crates/orrbeam-core", "crates/orrbeam-net", "crates/orrbeam-platform", "src-tauri", "tests/e2e"]
 resolver = "2"
 
 [workspace.package]
@@ -14,7 +14,8 @@ serde_yaml = "0.9"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
 thiserror = "2"
 anyhow = "1"
 

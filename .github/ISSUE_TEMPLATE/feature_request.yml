@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest an improvement or new capability for orrbeam
+title: "[feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing something. orrbeam is intentionally narrow; concrete
+        proposals tied to a real workflow land best.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can't you do today, or what's awkward? Describe the workflow first; the feature comes later.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What change would unblock the workflow? UI sketch in text is fine.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you try or consider, and why did it not fit?
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Who do you think this is for?
+      options:
+        - "Just for me / my setup"
+        - "Would like to share — useful for other self-hosters"
+        - "Commercial-fit — useful broadly enough to ship"
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else

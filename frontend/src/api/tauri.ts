@@ -189,6 +189,15 @@ const mocks: Record<string, unknown> = {
   ],
 
   connect_to_peer: null,
+
+  // ── Shared control (INS-002) ─────────────────────────────────────────────
+
+  start_shared_control: null,
+  stop_shared_control: null,
+  add_sc_participant: 0,
+  remove_sc_participant: null,
+  list_sc_participants: [] as string[],
+
   remote_peer_status: {
     sunshine: { status: "running" },
     moonlight: { status: "installed" },
@@ -231,9 +240,7 @@ export type PeeringProgressCallback = (progress: PeeringProgress) => void;
  * In browser mock mode, listens for a custom DOM event on `window` so that
  * dev tooling can dispatch synthetic progress events for testing.
  */
-export async function onPeeringProgress(
-  cb: PeeringProgressCallback
-): Promise<() => void> {
+export async function onPeeringProgress(cb: PeeringProgressCallback): Promise<() => void> {
   if (IS_TAURI) {
     const { listen } = await import("@tauri-apps/api/event");
     const unlisten = await listen<PeeringProgress>("peering:progress", (event) => {

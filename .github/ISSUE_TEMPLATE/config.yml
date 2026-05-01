@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussions
+    url: https://github.com/TruStoryHnsl/orrbeam/discussions
+    about: General questions, setup help, ideas not yet a concrete feature request.
+  - name: Security report
+    url: https://github.com/TruStoryHnsl/orrbeam/security/advisories/new
+    about: Report a vulnerability privately (do NOT use public issues for this).

@@ -1,3 +1,5 @@
+//! LAN node discovery and registration via `_orrbeam._tcp` mDNS.
+
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use orrbeam_core::node::{DiscoverySource, Node, NodeRegistry, NodeState};
 use std::sync::Arc;
@@ -32,9 +34,7 @@ pub async fn browse(registry: Arc<RwLock<NodeRegistry>>) -> Result<(), crate::Di
                             port: info.get_port(),
                             state: NodeState::Online,
                             source: DiscoverySource::Mdns,
-                            fingerprint: info
-                                .get_property_val_str("fingerprint")
-                                .map(String::from),
+                            fingerprint: info.get_property_val_str("fingerprint").map(String::from),
                             sunshine_available: info
                                 .get_property_val_str("sunshine")
                                 .is_some_and(|v| v == "true"),
@@ -43,9 +43,7 @@ pub async fn browse(registry: Arc<RwLock<NodeRegistry>>) -> Result<(), crate::Di
                                 .is_some_and(|v| v == "true"),
                             os: info.get_property_val_str("os").map(String::from),
                             encoder: info.get_property_val_str("encoder").map(String::from),
-                            cert_sha256: info
-                                .get_property_val_str("cert_sha256")
-                                .map(String::from),
+                            cert_sha256: info.get_property_val_str("cert_sha256").map(String::from),
                             last_seen: None,
                         };
 
@@ -92,8 +90,7 @@ pub fn register(
     node_name: &str,
     info: &RegistrationInfo,
 ) -> Result<ServiceDaemon, crate::DiscoveryError> {
-    let daemon =
-        ServiceDaemon::new().map_err(|e| crate::DiscoveryError::Mdns(e.to_string()))?;
+    let daemon = ServiceDaemon::new().map_err(|e| crate::DiscoveryError::Mdns(e.to_string()))?;
 
     // Resolve the local hostname for the mDNS SRV record.
     let host_name = hostname::get()
@@ -109,8 +106,16 @@ pub fn register(
 
     // Build TXT properties with all orrbeam service metadata.
     let port_str = info.port.to_string();
-    let sunshine_str = if info.sunshine_available { "true" } else { "false" };
-    let moonlight_str = if info.moonlight_available { "true" } else { "false" };
+    let sunshine_str = if info.sunshine_available {
+        "true"
+    } else {
+        "false"
+    };
+    let moonlight_str = if info.moonlight_available {
+        "true"
+    } else {
+        "false"
+    };
 
     let mut txt: Vec<(&str, &str)> = vec![
         ("node_name", node_name),
@@ -127,10 +132,16 @@ pub fn register(
         txt.push(("encoder", enc));
     }
 
-    let service_info =
-        ServiceInfo::new(SERVICE_TYPE, node_name, &fqhn, "", info.port, txt.as_slice())
-            .map_err(|e| crate::DiscoveryError::Mdns(e.to_string()))?
-            .enable_addr_auto();
+    let service_info = ServiceInfo::new(
+        SERVICE_TYPE,
+        node_name,
+        &fqhn,
+        "",
+        info.port,
+        txt.as_slice(),
+    )
+    .map_err(|e| crate::DiscoveryError::Mdns(e.to_string()))?
+    .enable_addr_auto();
 
     daemon
         .register(service_info)
@@ -170,6 +181,10 @@ mod tests {
             port: 47782,
         };
         let result = register("test-node", &info);
-        assert!(result.is_ok(), "register() should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "register() should succeed: {:?}",
+            result.err()
+        );
     }
 }

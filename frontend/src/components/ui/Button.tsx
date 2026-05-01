@@ -6,14 +6,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants = {
-  sunshine:
-    "bg-sunshine/20 text-sunshine hover:bg-sunshine/30 border border-sunshine/30",
-  moonlight:
-    "bg-moonlight/20 text-moonlight hover:bg-moonlight/30 border border-moonlight/30",
-  danger:
-    "bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30",
-  ghost:
-    "text-neutral-400 hover:text-white hover:bg-surface-3",
+  sunshine: "bg-sunshine/20 text-sunshine hover:bg-sunshine/30 border border-sunshine/30",
+  moonlight: "bg-moonlight/20 text-moonlight hover:bg-moonlight/30 border border-moonlight/30",
+  danger: "bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30",
+  ghost: "text-neutral-400 hover:text-white hover:bg-surface-3",
 };
 
 const sizes = {

@@ -35,8 +35,9 @@ pub use middleware::PeerContext;
 pub use nonce::NonceCache;
 
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use std::net::IpAddr;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use axum::routing::{get, post};
 use tokio::sync::RwLock;
@@ -123,10 +124,25 @@ pub struct ControlState {
     pub pending_mutual_trust: Arc<RwLock<HashMap<uuid::Uuid, PendingMutualTrust>>>,
     /// Platform abstraction for Sunshine / Moonlight process management.
     pub platform: Arc<dyn orrbeam_platform::Platform + Send + Sync>,
+    /// Active shared-control session, if any.
+    ///
+    /// Shared with the Tauri `AppState` via the same `Arc` so that Tauri
+    /// commands (`start_shared_control`, etc.) and the HTTP server join
+    /// endpoint both operate on the same live session.
+    pub shared_control: Arc<
+        Mutex<
+            Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>,
+        >,
+    >,
     /// Event emitter for forwarding control-plane events to the UI layer.
     pub event_emitter: Arc<dyn EventEmitter>,
     /// Cancellation token; cancel this to initiate a graceful shutdown.
     pub shutdown: CancellationToken,
+    /// Per-IP timestamps of recent TOFU requests, for rate-limiting (§19.9).
+    ///
+    /// Enforces max 3 requests per IP per 60-second window on the
+    /// `POST /v1/mutual-trust-request` endpoint.
+    pub ip_tofu_attempts: Arc<RwLock<HashMap<IpAddr, Vec<Instant>>>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +166,7 @@ pub fn build_router(state: Arc<ControlState>) -> axum::Router {
         .route("/sunshine/stop", post(routes::sunshine_stop))
         .route("/pair/accept", post(routes::pair_accept))
         .route("/peers", get(routes::peers_list))
+        .route("/shared-control/join", post(routes::shared_control_join))
         .layer(from_fn_with_state(
             state.clone(),
             middleware::require_signed,
@@ -216,7 +233,7 @@ pub async fn serve(
         axum_server::tls_rustls::RustlsConfig::from_config(Arc::new(tls_config)),
     )
     .handle(handle)
-    .serve(router.into_make_service())
+    .serve(router.into_make_service_with_connect_info::<std::net::SocketAddr>())
     .await?;
 
     Ok(())
@@ -271,7 +288,8 @@ mod tests {
             fn sunshine_status(
                 &self,
                 _: &orrbeam_core::config::Config,
-            ) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError> {
+            ) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError>
+            {
                 Ok(orrbeam_platform::ServiceInfo {
                     name: "sunshine".into(),
                     status: orrbeam_platform::ServiceStatus::NotInstalled,
@@ -282,7 +300,8 @@ mod tests {
             fn moonlight_status(
                 &self,
                 _: &orrbeam_core::config::Config,
-            ) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError> {
+            ) -> Result<orrbeam_platform::ServiceInfo, orrbeam_platform::PlatformError>
+            {
                 Ok(orrbeam_platform::ServiceInfo {
                     name: "moonlight".into(),
                     status: orrbeam_platform::ServiceStatus::NotInstalled,
@@ -314,7 +333,8 @@ mod tests {
             }
             fn monitors(
                 &self,
-            ) -> Result<Vec<orrbeam_platform::MonitorInfo>, orrbeam_platform::PlatformError> {
+            ) -> Result<Vec<orrbeam_platform::MonitorInfo>, orrbeam_platform::PlatformError>
+            {
                 Ok(vec![])
             }
             fn gpu_info(
@@ -336,8 +356,7 @@ mod tests {
             }
         }
 
-        let identity =
-            Arc::new(orrbeam_core::identity::Identity::generate().expect("identity"));
+        let identity = Arc::new(orrbeam_core::identity::Identity::generate().expect("identity"));
 
         // Build a TlsIdentity with a temp dir.
         let tmp = tempfile::TempDir::new().unwrap();
@@ -351,14 +370,14 @@ mod tests {
             identity,
             tls,
             config: Arc::new(RwLock::new(orrbeam_core::config::Config::default())),
-            peers: Arc::new(RwLock::new(
-                orrbeam_core::peers::TrustedPeerStore::default(),
-            )),
+            peers: Arc::new(RwLock::new(orrbeam_core::peers::TrustedPeerStore::default())),
             nonces: NonceCache::new(),
             pending_mutual_trust: Arc::new(RwLock::new(HashMap::new())),
             platform: Arc::new(StubPlatform),
+            shared_control: Arc::new(std::sync::Mutex::new(None)),
             event_emitter: Arc::new(NoopEmitter),
             shutdown: CancellationToken::new(),
+            ip_tofu_attempts: Arc::new(RwLock::new(HashMap::new())),
         });
 
         // This call exercises the full router construction — if it compiles and

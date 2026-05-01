@@ -1,4 +1,5 @@
 use crate::AppState;
+use crate::error::AppError;
 use orrbeam_platform::ServiceInfo;
 use serde::Deserialize;
 use tauri::State;
@@ -12,19 +13,32 @@ pub struct ConnectParams {
 }
 
 #[tauri::command]
-pub async fn get_moonlight_status(state: State<'_, AppState>) -> Result<ServiceInfo, String> {
+pub async fn get_moonlight_status(state: State<'_, AppState>) -> Result<ServiceInfo, AppError> {
     let config = state.config.read().await;
     state
         .platform
         .moonlight_status(&config)
-        .map_err(|e| e.to_string())
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
 pub async fn start_moonlight(
     state: State<'_, AppState>,
     params: ConnectParams,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
+    // Input validation
+    if params.address.trim().is_empty() {
+        return Err(AppError::InvalidInput("address must not be empty".into()));
+    }
+    if let Some(ref res) = params.resolution {
+        // Resolution must be in WxH format if provided
+        if !res.is_empty() && !res.contains('x') {
+            return Err(AppError::InvalidInput(
+                "resolution must be in WxH format (e.g. '1920x1080')".into(),
+            ));
+        }
+    }
+
     let config = state.config.read().await;
     state
         .platform
@@ -35,10 +49,10 @@ pub async fn start_moonlight(
             params.windowed.unwrap_or(false),
             params.resolution.as_deref(),
         )
-        .map_err(|e| e.to_string())
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
-pub async fn stop_moonlight(state: State<'_, AppState>) -> Result<(), String> {
-    state.platform.stop_moonlight().map_err(|e| e.to_string())
+pub async fn stop_moonlight(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.platform.stop_moonlight().map_err(AppError::from)
 }

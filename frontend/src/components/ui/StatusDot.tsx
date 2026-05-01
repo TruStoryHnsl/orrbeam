@@ -13,8 +13,6 @@ type StatusType = keyof typeof colors;
 
 export function StatusDot({ status }: { status: StatusType }) {
   return (
-    <span
-      className={`inline-block w-2 h-2 rounded-full ${colors[status] ?? "bg-neutral-500"}`}
-    />
+    <span className={`inline-block w-2 h-2 rounded-full ${colors[status] ?? "bg-neutral-500"}`} />
   );
 }

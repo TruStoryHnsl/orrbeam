@@ -2,12 +2,13 @@
 
 ## Supported versions
 
-Only the latest `0.x` release receives security fixes. Pre-release (`-alpha`, `-beta`, `-rc`) versions are not supported.
+Orrbeam is currently a pre-`1.0` project. Only the latest `0.x` release receives security fixes. Pre-release (`-alpha`, `-beta`, `-rc`) versions are not supported.
 
 | Version | Supported |
 |---------|-----------|
 | 0.x (latest) | Yes |
 | older 0.x | No — upgrade to latest |
+| Unreleased feature branches, local-only patches, and archived prototype code such as `v1/` | No |
 
 ## Reporting a vulnerability
 
@@ -19,7 +20,14 @@ Use [GitHub Security Advisories](https://github.com/TruStoryHnsl/orrbeam/securit
 
 ### Fallback channel
 
-If you cannot use GitHub Security Advisories, email **colton.j.orr@gmail.com** with subject line `[SECURITY] orrbeam — <brief description>`. Encrypt your message with the maintainer's GPG key if the details are sensitive.
+If you cannot use GitHub Security Advisories, email **colton.j.orr@gmail.com** with subject line `[SECURITY] orrbeam — <brief description>`. Encrypt your message with the maintainer's GPG key if the details are sensitive. (Or use `TruStoryHnsl@users.noreply.github.com`.)
+
+### Please include
+
+- A clear description of the issue and affected component
+- Reproduction steps or a proof of concept
+- Impact assessment, including required privileges or network position
+- Version, platform, and relevant configuration details
 
 ## Triage SLA
 
@@ -28,6 +36,8 @@ If you cannot use GitHub Security Advisories, email **colton.j.orr@gmail.com** w
 | Acknowledgement | 72 hours |
 | Initial severity assessment | 14 days |
 | Fix or documented mitigation | Depends on severity (see below) |
+
+Initial assessment means confirming whether the report appears valid, whether it is in scope, and what the next handling step will be.
 
 Severity targets:
 
@@ -44,13 +54,18 @@ Severity targets:
 - `crates/orrbeam-platform` — Sunshine/Moonlight process management
 - `src-tauri` — Tauri IPC command surface, AppState
 - Frontend (`frontend/`) — IPC wrappers, Zustand stores
+- Security issues involving credential handling, identity material, configuration parsing, or privilege boundaries implemented by Orrbeam itself
 
 ### Out of scope
 
 - Vulnerabilities in **Sunshine** or **Moonlight** upstream — report those to their respective projects
 - Vulnerabilities in **Headscale** — report to the Headscale project
+- Third-party package vulnerabilities that are not reachable through Orrbeam's shipped behavior
+- Findings that require prior local administrator or root compromise on the target machine
 - Issues requiring physical access to the machine
-- Theoretical attacks with no realistic exploit path
+- General hardening suggestions, missing best-practice headers, or purely theoretical concerns without a demonstrable security impact in Orrbeam
+
+If a report spans both Orrbeam and an upstream dependency, report it here if Orrbeam's integration meaningfully contributes to the impact. Pure upstream defects should be reported to the upstream project.
 
 ## Disclosure policy
 

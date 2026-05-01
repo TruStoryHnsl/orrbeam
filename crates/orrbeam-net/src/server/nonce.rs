@@ -154,11 +154,7 @@ impl NonceCache {
             sub.retain(|_, ts| now.duration_since(*ts) <= gc_ttl);
             let pruned = before - sub.len();
             if pruned > 0 {
-                tracing::debug!(
-                    key_id,
-                    pruned,
-                    "nonce cache GC: pruned expired entries"
-                );
+                tracing::debug!(key_id, pruned, "nonce cache GC: pruned expired entries");
                 total_pruned += pruned;
             }
             !sub.is_empty()

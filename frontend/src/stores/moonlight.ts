@@ -24,7 +24,12 @@ interface MoonlightState {
 
   fetchStatus: () => Promise<void>;
   fetchNodes: () => Promise<void>;
-  connect: (address: string, app?: string, windowed?: boolean, resolution?: string) => Promise<void>;
+  connect: (
+    address: string,
+    app?: string,
+    windowed?: boolean,
+    resolution?: string
+  ) => Promise<void>;
   disconnect: () => Promise<void>;
 }
 

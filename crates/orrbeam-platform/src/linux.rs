@@ -1,5 +1,7 @@
-use crate::common::{resolve_binary, stop_tracked, store_child, ChildSlot};
-use crate::{GpuInfo, MonitorInfo, Platform, PlatformError, PlatformInfo, ServiceInfo, ServiceStatus};
+use crate::common::{ChildSlot, resolve_binary, stop_tracked, store_child};
+use crate::{
+    GpuInfo, MonitorInfo, Platform, PlatformError, PlatformInfo, ServiceInfo, ServiceStatus,
+};
 use orrbeam_core::Config;
 use std::process::Command;
 
@@ -49,7 +51,11 @@ impl Platform for LinuxPlatform {
                 content
                     .lines()
                     .find(|l| l.starts_with("PRETTY_NAME="))
-                    .map(|l| l.trim_start_matches("PRETTY_NAME=").trim_matches('"').to_string())
+                    .map(|l| {
+                        l.trim_start_matches("PRETTY_NAME=")
+                            .trim_matches('"')
+                            .to_string()
+                    })
             });
 
         PlatformInfo {
@@ -68,7 +74,9 @@ impl Platform for LinuxPlatform {
 
         let running = Self::run("pgrep", &["-x", "sunshine"]).is_ok();
 
-        let version = path.as_ref().and_then(|p| Self::run(p, &["--version"]).ok());
+        let version = path
+            .as_ref()
+            .and_then(|p| Self::run(p, &["--version"]).ok());
 
         Ok(ServiceInfo {
             name: "Sunshine".to_string(),
@@ -95,9 +103,7 @@ impl Platform for LinuxPlatform {
         let version = Self::run("pacman", &["-Q", "moonlight-qt"])
             .ok()
             .and_then(|out| out.split_whitespace().nth(1).map(String::from))
-            .or_else(|| {
-                Self::run("dpkg-query", &["-W", "-f=${Version}", "moonlight-qt"]).ok()
-            });
+            .or_else(|| Self::run("dpkg-query", &["-W", "-f=${Version}", "moonlight-qt"]).ok());
 
         Ok(ServiceInfo {
             name: "Moonlight".to_string(),
@@ -179,8 +185,8 @@ impl Platform for LinuxPlatform {
     }
 
     fn monitors(&self) -> Result<Vec<MonitorInfo>, PlatformError> {
-        let output = Self::run("xrandr", &["--listmonitors"])
-            .or_else(|_| Self::run("wlr-randr", &[]))?;
+        let output =
+            Self::run("xrandr", &["--listmonitors"]).or_else(|_| Self::run("wlr-randr", &[]))?;
 
         let monitors = output
             .lines()
@@ -189,9 +195,10 @@ impl Platform for LinuxPlatform {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 let primary = line.contains('*');
                 let name = parts.last()?.to_string();
-                let res = parts.iter().find(|p| p.contains('x')).map(|r| {
-                    r.split('/').next().unwrap_or(*r).to_string()
-                });
+                let res = parts
+                    .iter()
+                    .find(|p| p.contains('x'))
+                    .map(|r| r.split('/').next().unwrap_or(*r).to_string());
                 Some(MonitorInfo {
                     name,
                     resolution: res.unwrap_or_default(),
@@ -229,7 +236,10 @@ impl Platform for LinuxPlatform {
 
     fn gpu_info(&self) -> Result<GpuInfo, PlatformError> {
         // Try nvidia-smi first, then vainfo
-        if let Ok(output) = Self::run("nvidia-smi", &["--query-gpu=name,driver_version", "--format=csv,noheader"]) {
+        if let Ok(output) = Self::run(
+            "nvidia-smi",
+            &["--query-gpu=name,driver_version", "--format=csv,noheader"],
+        ) {
             let parts: Vec<&str> = output.split(", ").collect();
             return Ok(GpuInfo {
                 name: parts.first().unwrap_or(&"NVIDIA GPU").to_string(),

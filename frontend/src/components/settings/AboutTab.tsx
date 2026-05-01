@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { invoke } from '@/api/tauri';
-import { usePlatformStore } from '@/stores/platform';
-import type { TlsFingerprint } from '@/types/peers';
+import { useEffect, useState } from "react";
+import { invoke } from "@/api/tauri";
+import { usePlatformStore } from "@/stores/platform";
+import type { TlsFingerprint } from "@/types/peers";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -22,12 +22,17 @@ function CopyButton({ text }: { text: string }) {
       className="ml-2 px-1.5 py-0.5 rounded text-xs text-neutral-500 hover:text-neutral-300 hover:bg-surface-3 transition-colors"
       title="Copy to clipboard"
     >
-      {copied ? '&#10003;' : 'copy'}
+      {copied ? "&#10003;" : "copy"}
     </button>
   );
 }
 
-function InfoRow({ label, value, mono = false, copyable = false }: {
+function InfoRow({
+  label,
+  value,
+  mono = false,
+  copyable = false,
+}: {
   label: string;
   value: string;
   mono?: boolean;
@@ -37,7 +42,7 @@ function InfoRow({ label, value, mono = false, copyable = false }: {
     <div className="flex flex-col gap-0.5">
       <span className="text-xs text-neutral-500 uppercase tracking-wide">{label}</span>
       <div className="flex items-center">
-        <span className={`text-sm text-neutral-200 break-all ${mono ? 'font-mono' : ''}`}>
+        <span className={`text-sm text-neutral-200 break-all ${mono ? "font-mono" : ""}`}>
           {value}
         </span>
         {copyable && <CopyButton text={value} />}
@@ -48,10 +53,13 @@ function InfoRow({ label, value, mono = false, copyable = false }: {
 
 /** Format a hex string into space-separated groups of 4 chars. */
 function formatHex(hex: string, groupSize = 4): string {
-  return hex.replace(new RegExp(`.{1,${groupSize}}`, 'g'), (m) => m).split('').reduce((acc, ch, i) => {
-    if (i > 0 && i % groupSize === 0) acc += ' ';
-    return acc + ch;
-  }, '');
+  return hex
+    .replace(new RegExp(`.{1,${groupSize}}`, "g"), (m) => m)
+    .split("")
+    .reduce((acc, ch, i) => {
+      if (i > 0 && i % groupSize === 0) acc += " ";
+      return acc + ch;
+    }, "");
 }
 
 export function AboutTab() {
@@ -61,26 +69,21 @@ export function AboutTab() {
   const [tlsError, setTlsError] = useState<string | null>(null);
 
   useEffect(() => {
-    invoke('get_tls_fingerprint')
+    invoke("get_tls_fingerprint")
       .then((data) => setTls(data as TlsFingerprint))
       .catch((e) => setTlsError(String(e)));
   }, []);
 
-  const nodeName = info?.hostname ?? '—';
-  const ed25519Fp = identity?.fingerprint ?? tls?.ed25519_fingerprint ?? '—';
+  const nodeName = info?.hostname ?? "—";
+  const ed25519Fp = identity?.fingerprint ?? tls?.ed25519_fingerprint ?? "—";
   const certSha256Raw = tls?.cert_sha256 ?? null;
-  const certSha256Fmt = certSha256Raw ? formatHex(certSha256Raw, 4) : '—';
-  const controlPort = tls?.control_port ?? '—';
+  const certSha256Fmt = certSha256Raw ? formatHex(certSha256Raw, 4) : "—";
+  const controlPort = tls?.control_port ?? "—";
 
   return (
     <div className="space-y-5 p-4">
       <InfoRow label="Node name" value={nodeName} />
-      <InfoRow
-        label="Ed25519 fingerprint"
-        value={ed25519Fp}
-        mono
-        copyable={ed25519Fp !== '—'}
-      />
+      <InfoRow label="Ed25519 fingerprint" value={ed25519Fp} mono copyable={ed25519Fp !== "—"} />
       {tlsError ? (
         <div className="flex flex-col gap-0.5">
           <span className="text-xs text-neutral-500 uppercase tracking-wide">TLS cert SHA-256</span>

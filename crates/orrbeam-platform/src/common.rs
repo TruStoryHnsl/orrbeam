@@ -38,6 +38,9 @@ pub(crate) fn resolve_binary(
 /// - Returns `Ok(false)` if the slot was empty (caller should use its fallback).
 /// - Returns `Ok(true)` if a tracked child was stopped.
 pub(crate) fn stop_tracked(slot: &ChildSlot) -> Result<bool, PlatformError> {
+    // Mutex poison is a fatal bug, not a recoverable error. `expect` is
+    // the correct Rust idiom here; suppress the overly broad lint.
+    #[allow(clippy::expect_used)]
     let mut guard = slot.lock().expect("child slot poisoned");
     let Some(mut child) = guard.take() else {
         return Ok(false);
@@ -55,6 +58,7 @@ pub(crate) fn stop_tracked(slot: &ChildSlot) -> Result<bool, PlatformError> {
 
 /// Store a freshly-spawned `Child` in a slot, reaping any stale predecessor.
 pub(crate) fn store_child(slot: &ChildSlot, child: Child) {
+    #[allow(clippy::expect_used)]
     let mut guard = slot.lock().expect("child slot poisoned");
     if let Some(mut old) = guard.take() {
         // Reap any old handle that may still be in the slot from a previous spawn.

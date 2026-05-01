@@ -17,23 +17,17 @@
 
 use std::sync::Arc;
 
-use axum::{
-    body::Body,
-    extract::State,
-    http::Request,
-    middleware::Next,
-    response::Response,
-};
-use base64::engine::general_purpose::STANDARD_NO_PAD;
+use axum::{body::Body, extract::State, http::Request, middleware::Next, response::Response};
 use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD_NO_PAD;
 use ed25519_dalek::VerifyingKey;
 
 use orrbeam_core::wire::{
     HEADER_KEY_ID, HEADER_NONCE, HEADER_SIGNATURE, HEADER_TIMESTAMP, HEADER_VERSION,
 };
 
-use super::errors::ControlError;
 use super::ControlState;
+use super::errors::ControlError;
 
 // ---------------------------------------------------------------------------
 // PeerContext
@@ -91,9 +85,7 @@ pub async fn require_signed(
     let signature_b64 = extract_header(&request, HEADER_SIGNATURE)?;
 
     // ── Step 2: Clock skew check ─────────────────────────────────────────────
-    let timestamp: i64 = timestamp_str
-        .parse()
-        .map_err(|_| ControlError::ClockSkew)?;
+    let timestamp: i64 = timestamp_str.parse().map_err(|_| ControlError::ClockSkew)?;
 
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let skew = (now - timestamp).unsigned_abs();
@@ -131,7 +123,8 @@ pub async fn require_signed(
         .try_into()
         .map_err(|_| ControlError::BadSignature)?;
 
-    let verifying_key = VerifyingKey::from_bytes(&pk_array).map_err(|_| ControlError::BadSignature)?;
+    let verifying_key =
+        VerifyingKey::from_bytes(&pk_array).map_err(|_| ControlError::BadSignature)?;
 
     orrbeam_core::wire::verify_signature(
         &verifying_key,
@@ -181,7 +174,8 @@ mod tests {
     #[test]
     fn canonical_string_changes_with_method() {
         let get = build_canonical_string("GET", "/v1/status", 1700000000, "nonce1", "keyabc", b"");
-        let post = build_canonical_string("POST", "/v1/status", 1700000000, "nonce1", "keyabc", b"");
+        let post =
+            build_canonical_string("POST", "/v1/status", 1700000000, "nonce1", "keyabc", b"");
         assert_ne!(get, post);
     }
 

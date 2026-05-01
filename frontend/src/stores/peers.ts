@@ -22,7 +22,11 @@ interface PeersState {
   confirmPeer: (draft: PeerDraft) => Promise<void>;
   removePeer: (name: string) => Promise<void>;
   updatePermissions: (name: string, permissions: PeerPermissions) => Promise<void>;
-  requestMutualTrust: (address: string, port: number, note?: string) => Promise<MutualTrustInitResult>;
+  requestMutualTrust: (
+    address: string,
+    port: number,
+    note?: string
+  ) => Promise<MutualTrustInitResult>;
   approveMutualTrust: (requestId: string) => Promise<void>;
   rejectMutualTrust: (requestId: string) => Promise<void>;
   connectTo: (peerName: string) => Promise<void>;

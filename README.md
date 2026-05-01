@@ -1,199 +1,184 @@
-<div align="center">
+# orrbeam
 
-<img src="branding/logo.png" alt="Orrbeam logo" width="160" />
+A bidirectional Sunshine/Moonlight mesh — every machine is both host and client, all of them managed from a single Tauri desktop app.
 
-# Orrbeam
+## What it is
 
-**Unified Sunshine/Moonlight mesh — bidirectional remote desktop, one app.**
+Sunshine streams a desktop. Moonlight receives it. Traditionally that's a one-way pair: machine A hosts, machine B watches, and you wire each direction up by hand on each box.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-F8D808.svg)](#license)
-[![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%20v2-24C8DB.svg)](https://tauri.app/)
-[![Rust](https://img.shields.io/badge/rust-2024-CE422B.svg)](https://www.rust-lang.org/)
-[![React](https://img.shields.io/badge/react-19-61DAFB.svg)](https://react.dev/)
-[![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macos%20%7C%20windows-787808.svg)](#platform-support)
+orrbeam collapses both sides into one application. Every node runs Sunshine *and* Moonlight under the same UI. Click any peer to connect to it; see the peers connected to you in the same panel. The mesh discovers itself over LAN mDNS or through your existing Headscale/orrtellite tailnet, and the trust between nodes is managed by signed Ed25519 identities — not Sunshine's PIN-pairing flow alone.
 
-</div>
+The split-pane UI is the whole product:
 
----
+- **Left panel — Sunshine (Host).** Status, encoder, monitor, current resolution/FPS, list of clients streaming from you, start/stop.
+- **Right panel — Moonlight (Client).** Discovered peers, connection state, "Connect (remote)" against any trusted node, inflight session.
+- **Bottom bar — Mesh.** Every node, online/offline, trust state.
 
-Orrbeam is a desktop application that turns every machine you own into a node on a personal remote-desktop mesh. Each node runs **both** [Sunshine](https://app.lizardbyte.dev/Sunshine/) (host) and [Moonlight](https://moonlight-stream.org/) (client), and Orrbeam manages them through a single GUI. Click any node to stream **to** it; see at a glance who is streaming **from** you.
+Connecting to a remote machine is a single click on a trusted peer. The control-plane handshake (start Sunshine on the other end, submit the pairing PIN, launch Moonlight here) happens behind the button.
 
-No daemon. No CLI. No central server. Just one app on every device, discovering each other over your LAN or [orrtellite](https://github.com/TruStoryHnsl/orrtellite) mesh VPN.
+## Why
 
-## Why Orrbeam
+> "I need a desktop UI that manages sunshine and moonlight in one two-parted standalone application."
 
-Sunshine and Moonlight are excellent on their own — but using them together across several machines means juggling two apps, two configurations, and two mental models per device. Orrbeam collapses that into one bidirectional view:
+Sunshine and Moonlight are excellent on their own. Treating them as two separate tools — each with its own config UI, paired one direction at a time — is the part that doesn't scale once you have more than two machines.
 
-- **One app per machine.** Install Orrbeam, and that machine is automatically both a stream target *and* a stream source.
-- **Unified node list.** All your machines appear in one panel, regardless of which side of the connection they're on.
-- **Self-organizing mesh.** Nodes find each other via mDNS on the LAN and via the [orrtellite](https://github.com/TruStoryHnsl/orrtellite) Headscale API across networks. No manual peer lists to maintain.
-- **Self-contained.** Ed25519 identity, YAML config, no cloud account, no telemetry.
+A few principles drive the design:
 
-## Features
+- **One mesh, not N pairs.** When you have a desktop, a laptop, a Mac, and a tablet, you don't want six pairing dialogs. You want one app showing all of them.
+- **Self-hosted control plane.** Discovery rides on whatever mesh you already run — orrtellite (Headscale) by default, mDNS on plain LAN, static entries when you want explicit. No vendor cloud sits between your machines.
+- **Identity, not PINs.** Each node has an Ed25519 signing key and a self-signed TLS cert pinned by trusted peers. Pairing happens once, out of band; from then on, "Connect (remote)" is one click.
+- **Future use case: shared local play.** The longer-term target is using the same control plane to let a remote friend share input on a host's running emulator — one game, two players, two physical machines. The bidirectional control plane is the substrate for that; the input multiplexing layer is the next piece.
 
-- **Bidirectional control panel** — Sunshine (host) on the left, Moonlight (client) on the right, mesh status bar across the bottom.
-- **Process supervision** — start, stop, and monitor Sunshine and Moonlight directly from the GUI; no shell required.
-- **Cross-network discovery** — LAN discovery via `_orrbeam._tcp` mDNS, plus polling of an orrtellite/Headscale API for nodes outside the local network.
-- **Static fallback** — pin nodes by hostname in `config.yaml` when discovery is not available.
-- **Cryptographic identity** — each node generates an Ed25519 keypair on first run; no passwords or shared secrets.
-- **Native, signed binaries** — distributed as a Tauri-built desktop app, not an Electron blob.
-- **Mock-mode dev loop** — open the Vite frontend in a plain browser to iterate on UI without rebuilding the Rust shell.
-
-## Screenshots
-
-> Coming soon — the v2 GUI is under active development.
-
-## Platform support
-
-| Platform | Host (Sunshine) | Client (Moonlight) | Status |
-|----------|-----------------|--------------------|--------|
-| **Linux** (X11 / Wayland) | NVENC, VAAPI, software | `moonlight-qt` | Supported |
-| **macOS** (Apple Silicon / Intel) | VideoToolbox | Moonlight.app | Supported |
-| **Windows** 10 / 11 | NVENC, AMF, QuickSync | Moonlight | Supported |
-| **iOS / iPadOS** | — | Moonlight | Client-only |
-| **Android** | — | Moonlight | Client-only |
-
-Sunshine and Moonlight must be installed separately — Orrbeam manages them, it does not bundle them. See the [Sunshine docs](https://docs.lizardbyte.dev/projects/sunshine/latest/) and [Moonlight downloads](https://moonlight-stream.org/) for platform-specific install instructions.
-
-## Quick start
-
-### Prerequisites
-
-- **Rust** (stable, 2024 edition) — [install via rustup](https://rustup.rs/)
-- **Node.js** 20+ and **npm**
-- **Tauri v2 system dependencies** — see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/) for your OS
-- **Sunshine** and/or **Moonlight** installed on the host
-
-### Run from source
-
-```bash
-git clone https://github.com/TruStoryHnsl/orrbeam.git
-cd orrbeam
-
-# Install frontend dependencies
-cd frontend && npm install && cd ..
-
-# Launch the app in dev mode (Rust + Vite hot reload)
-cargo tauri dev
-```
-
-### Build a release binary
-
-```bash
-cargo tauri build
-```
-
-The bundled installer/binary is written to `target/release/bundle/` (format depends on your OS — `.deb`, `.dmg`, `.msi`, `.AppImage`, etc.).
-
-## Configuration
-
-Orrbeam stores its config at:
-
-| OS | Path |
-|----|------|
-| Linux | `~/.config/orrbeam/config.yaml` |
-| macOS | `~/Library/Application Support/orrbeam/config.yaml` |
-| Windows | `%APPDATA%\orrbeam\config.yaml` |
-
-The file is created on first launch. A typical layout:
-
-```yaml
-# Display name shown to peers
-node_name: orrion
-
-# Optional orrtellite (Headscale) integration for off-LAN discovery
-orrtellite_url: https://headscale.example.org
-orrtellite_api_key: ${ORRTELLITE_API_KEY}   # read from env
-
-# Manually pinned peers
-static_nodes:
-  - name: orrpheus
-    address: 100.64.0.4
-  - name: orrgate
-    address: 192.168.1.145
-```
-
-Secrets such as `orrtellite_api_key` should be supplied via environment variables, never committed to the file directly.
+It is free, MIT-licensed, and explicitly aimed at being usable by people who didn't write it.
 
 ## Architecture
 
-Orrbeam is a single Tauri v2 desktop application backed by a small Rust workspace. The frontend talks to the backend exclusively through Tauri IPC commands.
-
 ```
-orrbeam/
-├── src-tauri/                 # Tauri v2 shell
-│   ├── src/
-│   │   ├── main.rs            # Entry point
-│   │   ├── lib.rs             # AppState, command registration
-│   │   └── commands/          # IPC: sunshine, moonlight, discovery, platform, settings
-│   └── tauri.conf.json
-├── crates/
-│   ├── orrbeam-core/          # Config, Ed25519 identity, Node/NodeRegistry types
-│   ├── orrbeam-net/           # mDNS discovery + Headscale API polling
-│   └── orrbeam-platform/      # Platform abstraction (linux/macos/windows)
-└── frontend/                  # React 19 + TypeScript + Zustand + Tailwind + Vite 6
-    └── src/
-        ├── api/tauri.ts       # IPC wrapper (with mock mode for browser dev)
-        ├── stores/            # Zustand stores (sunshine, moonlight, platform)
-        └── components/        # layout / sunshine / moonlight / mesh / ui
+┌──────────────────────────────────────────────────────────────────┐
+│                  orrbeam app (Tauri v2 window)                   │
+│                                                                   │
+│  ┌─────────────────────┐         ┌─────────────────────┐         │
+│  │  Sunshine panel     │         │  Moonlight panel    │         │
+│  │  (host)             │         │  (client)           │         │
+│  │  start / stop /     │         │  peer list /        │         │
+│  │  connected clients  │         │  connect (remote)   │         │
+│  └──────────┬──────────┘         └──────────┬──────────┘         │
+│             │                                 │                   │
+│             ▼                                 ▼                   │
+│        ┌─────────────────────────────────────────────┐           │
+│        │   Tauri IPC commands  (src-tauri/commands)  │           │
+│        └────────────┬────────────────────┬───────────┘           │
+│                     │                    │                        │
+│           ┌─────────▼────┐    ┌──────────▼─────────┐             │
+│           │ orrbeam-     │    │ orrbeam-net        │             │
+│           │ platform     │    │ discovery + control│             │
+│           │ (linux/mac/  │    │ plane client/server│             │
+│           │  windows)    │    │                    │             │
+│           └─────────┬────┘    └──────────┬─────────┘             │
+│                     │                    │                        │
+│                     ▼                    ▼                        │
+│        Sunshine / Moonlight       mDNS + Headscale API           │
+│        (subprocess)               + signed HTTPS (Ed25519)        │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+              ┌─────────────────────────────┐
+              │      Other orrbeam nodes    │
+              │  (orrion, orrpheus, …)      │
+              └─────────────────────────────┘
 ```
 
-### Tech stack
+| Component | Purpose |
+|---|---|
+| `src-tauri/` | Tauri v2 shell. Holds `AppState` (config, identity, node registry, platform, TLS, trusted peers). Defines IPC commands for `sunshine`, `moonlight`, `discovery`, `platform`, `settings`. |
+| `crates/orrbeam-core` | Pure types. Config (YAML on disk), Ed25519 identity, `Node`/`NodeRegistry`, peer models, TLS cert helpers, wire-protocol primitives. |
+| `crates/orrbeam-net` | Discovery (mDNS over `_orrbeam._tcp`, Headscale polling) and the control-plane HTTPS server/client. Signed-request canonical-string handling, nonce + timestamp checking. |
+| `crates/orrbeam-platform` | Per-OS subprocess management for Sunshine and Moonlight. `linux.rs`, `macos.rs`, `windows.rs` implementing a shared `Platform` trait, picked at compile time via `#[cfg(target_os)]`. |
+| `frontend/` | React 19 + TypeScript + Zustand + Tailwind. Lazy-loads the Tauri API at runtime so the same bundle can be opened in a plain browser with mock data for fast UI iteration. |
+| `tests/e2e/` | Workspace member for end-to-end tests against the assembled control plane. |
 
-| Layer        | Choice                                                       |
-|--------------|--------------------------------------------------------------|
-| Shell        | Tauri v2                                                     |
-| Backend      | Rust 2024 edition, Tokio, `tracing`                          |
-| Frontend     | React 19, TypeScript 5.8, Zustand, Tailwind CSS              |
-| Build        | Vite 6, Cargo workspace                                      |
-| Identity     | Ed25519 (`ed25519-dalek`)                                    |
-| Discovery    | `mdns-sd` + Headscale REST API (`reqwest`)                   |
-| Config       | YAML (`serde_yaml`)                                          |
+The control plane (port `47782`, "orrbeam/1") is what makes one-click remote connect possible: it lets the local app reach into a trusted peer to start Sunshine, post the pairing PIN, and report status. Every signed request carries `X-Orrbeam-Timestamp`, `X-Orrbeam-Nonce`, and `X-Orrbeam-Signature` headers, with the canonical string `METHOD\nPATH\nTIMESTAMP\nNONCE\nSHA256(body)` — full normative description in [`docs/architecture.md`](docs/architecture.md) and [`docs/verifying_control_plane.md`](docs/verifying_control_plane.md).
 
-### Network ports
-
-| Port           | Purpose                                  |
-|----------------|------------------------------------------|
-| `1421`         | Vite dev server (development only)       |
-| `47984–47990`  | Sunshine streaming (managed externally)  |
-| `48010`        | Sunshine RTSP (managed externally)       |
-
-## Development
+## Quickstart
 
 ```bash
-# Run the full app with hot reload
+git clone git@github.com:TruStoryHnsl/orrbeam.git
+cd orrbeam
+
+# Frontend deps
+cd frontend && npm install && cd ..
+
+# Dev mode (Rust backend + Vite frontend with hot reload)
 cargo tauri dev
 
-# Frontend-only iteration in a regular browser (uses mock IPC data)
-cd frontend && npm run dev
-# then open http://localhost:1421
-
-# Frontend tests
-cd frontend && npm test
-
-# Rust tests
-cargo test --workspace
+# Production build
+cargo tauri build
 ```
 
-The platform crate uses `#[cfg(target_os = "...")]` so only the current OS's implementation is compiled. When adding a feature that touches process management, add the matching method to the `Platform` trait and implement it for `linux.rs`, `macos.rs`, and `windows.rs`.
+Useful local commands:
 
-> **Linux / Wayland note:** `main.rs` sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` to work around a WebKitGTK rendering bug. Remove only if you have verified the upstream fix is shipped.
+```bash
+cargo build --workspace
+cargo test --workspace
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo deny check                      # license + advisory enforcement
+cd frontend && npm run test
+```
 
-## Project status
+Frontend-only iteration (no Rust rebuild): `cd frontend && npm run dev` and open `http://localhost:1421/`. The IPC layer detects the missing Tauri runtime and serves mock data so panels render and exercise.
 
-Orrbeam is in early `0.1.x` development. The Rust workspace, Tauri shell, mesh discovery, and platform abstractions are in place; the GUI is being built out in parallel. Expect breaking changes between minor versions until `1.0.0`.
+### Prerequisites
 
-A previous Python prototype (daemon + CLI + TUI) lives under `v1/` for reference. **All new work happens in the Tauri workspace** — `v1/` is read-only.
+- Rust 1.80+ (rustup default toolchain)
+- Node.js 20+ and npm
+- Tauri v2 system dependencies for your OS (see [tauri.app](https://tauri.app/start/prerequisites/))
+- Sunshine installed on machines that will host
+- Moonlight installed on machines that will initiate sessions
+- A working GPU encode path on hosts (NVENC, VAAPI, VideoToolbox, AMF, QuickSync — whichever Sunshine supports on your hardware)
+
+### Runtime config
+
+Per-user config directory (`~/.config/orrbeam/` on Linux, `~/Library/Application Support/orrbeam/` on macOS, `%APPDATA%\orrbeam\` on Windows) holds:
+
+- `config.yaml` — node name, discovery toggles, static peers, Sunshine/Moonlight binary paths
+- `trusted_peers.yaml` — managed by the Settings → Peers tab; not hand-edited
+
+Identity material lives separately under `~/.local/share/orrbeam/`:
+
+- `identity/signing.key` — Ed25519 signing key
+- `tls/` — self-signed TLS cert derived from the signing key
+
+## Features
+
+- Two-pane host + client UI, both visible at once on every node
+- Bidirectional mesh — any node can host or connect; roles are dynamic
+- One-click "Connect (remote)" against trusted peers, including remote Sunshine start + PIN submit
+- Mutual-trust handshake via TOFU dialog (no out-of-band PIN required for trust establishment)
+- mDNS LAN discovery (`_orrbeam._tcp`) with manual fallback
+- orrtellite/Headscale tailnet discovery via API key
+- Static peer entries in `config.yaml` for explicit lists
+- Ed25519-signed control-plane requests with nonce + timestamp replay protection
+- TLS-1.3 with cert pinning between trusted peers
+- Cross-platform Rust workspace (Linux + macOS + Windows active; mobile clients planned)
+- Frontend mock mode for UI iteration without rebuilding the Tauri shell
+- License enforcement on every dep (`cargo deny`, `scripts/check-licenses.sh`) — no GPL/LGPL/AGPL anywhere in the tree
+- Rolling JSON log file in release builds — Linux: `~/.local/state/orrbeam/logs/orrbeam.log`, macOS: `~/Library/Application Support/orrbeam/logs/orrbeam.log`, Windows: `%LOCALAPPDATA%\orrbeam\logs\orrbeam.log`. Pretty tracing logs in dev with `RUST_LOG=orrbeam=debug`
+
+## Status
+
+**Active development. Single-author, single-mesh deployment today.** Day-to-day use is between `orrion` (CachyOS, RTX 3070), `orrpheus` (macOS M1 Pro), and `win11` (Windows 11). The Tauri shell, mesh discovery, signed control plane, and trust UI are working end-to-end on all three. Windows joins the mesh as a first-class node — both Sunshine host (NVENC / AMF / QuickSync) and moonlight-qt client.
+
+| Target | OS | Host (Sunshine) | Client (Moonlight) | State |
+|---|---|---|---|---|
+| orrion | CachyOS Linux | NVENC (RTX 3070) | moonlight-qt | Primary dev |
+| orrpheus | macOS (M1 Pro) | VideoToolbox | Moonlight.app | Primary dev |
+| win11 | Windows 11 | NVENC / AMF / QuickSync | Moonlight | Active |
+| iPad / iPhone | iOS | n/a (client only) | Moonlight (Tauri mobile) | Planned |
+| Android | Android | n/a (client only) | Moonlight (Tauri mobile) | Planned |
+
+**Not yet supported / explicitly out of scope right now:**
+
+- No headless / server mode — orrbeam is a desktop app, period. (The control plane runs in-process when the app is open.)
+- No CLI front end. The GUI is the only interface.
+- No vendor cloud; nothing phones home. If your tailnet/LAN is down, discovery degrades to static peers.
+- Couch-co-op input multiplexing (one host, two players sharing a running emulator) is a planned use case, not a shipped feature.
+- Mobile builds depend on Tauri 2's mobile pipeline maturing for our use case.
+
+If you're trying it on a third machine and something doesn't work, please open an issue — that's exactly the feedback this stage of the project needs.
+
+## Related projects
+
+- **[orrtellite](https://github.com/TruStoryHnsl/orrtellite)** — self-hosted Headscale + WireGuard mesh. orrbeam uses its API as one of three discovery sources.
+- **[orrchestrator](https://github.com/TruStoryHnsl/orrchestrator)** — the AI development hypervisor that drives most of this ecosystem's planning + parallel-session execution.
+- **[concord](https://github.com/TruStoryHnsl/concord)** — the matching self-hosted chat/voice stack. Same "no vendor cloud in the middle" posture as orrbeam.
+- **Sunshine** ([upstream](https://github.com/LizardByte/Sunshine)) — the host streamer orrbeam wraps.
+- **Moonlight** ([upstream](https://github.com/moonlight-stream)) — the client orrbeam launches and configures.
 
 ## Contributing
 
-Contributions are welcome. Before opening a PR:
-
-1. Run `cargo fmt --all` and `cargo clippy --workspace --all-targets`.
-2. Run `cargo test --workspace` and `cd frontend && npm test`.
-3. Use [Conventional Commits](https://www.conventionalcommits.org/) — e.g. `feat(mesh): add static node refresh`.
-4. Keep changes focused; large refactors should be discussed in an issue first.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Conventional commits, feature branches, license-clean dependencies, no GPL.
 
 ## License
 
-Orrbeam is released under the [MIT License](https://opensource.org/licenses/MIT).
+[MIT](LICENSE).
