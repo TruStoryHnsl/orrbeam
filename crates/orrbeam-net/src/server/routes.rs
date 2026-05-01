@@ -20,12 +20,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::{
-    extract::{Extension, Path, State},
     Json,
+    extract::{ConnectInfo, Extension, Path, State},
 };
-use base64::engine::general_purpose::STANDARD_NO_PAD;
 use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD_NO_PAD;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use uuid::Uuid;
 
 use orrbeam_core::wire::HelloPayload;
@@ -170,9 +171,7 @@ pub struct PairAcceptBody {
 ///
 /// Always returns 200. No authentication required — this endpoint is used
 /// during the initial TOFU handshake and node discovery.
-pub async fn hello(
-    State(state): State<Arc<ControlState>>,
-) -> Json<HelloPayload> {
+pub async fn hello(State(state): State<Arc<ControlState>>) -> Json<HelloPayload> {
     let config = state.config.read().await;
     let platform_info = state.platform.info();
 
@@ -216,12 +215,27 @@ pub async fn hello(
 /// outcome.
 pub async fn mutual_trust_request(
     State(state): State<Arc<ControlState>>,
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     Json(body): Json<MutualTrustBody>,
 ) -> Result<Json<MutualTrustResponse>, ControlError> {
     let now = time::OffsetDateTime::now_utc();
     let expires_at = now + Duration::from_secs(60);
 
-    // Rate-limit: reject if there is already a non-expired pending entry.
+    let client_ip = peer_addr.ip();
+
+    // §19.9 Per-IP rate-limit: max 3 TOFU requests per IP per 60-second window.
+    {
+        let mut ip_map = state.ip_tofu_attempts.write().await;
+        let attempts = ip_map.entry(client_ip).or_default();
+        let cutoff = std::time::Instant::now() - std::time::Duration::from_secs(60);
+        attempts.retain(|&t| t > cutoff);
+        if attempts.len() >= 3 {
+            return Err(ControlError::RateLimited);
+        }
+        attempts.push(std::time::Instant::now());
+    }
+
+    // §19.9 Global pending cap: max 1 pending request at a time.
     {
         let store = state.pending_mutual_trust.read().await;
         for entry in store.values() {
@@ -317,13 +331,15 @@ pub async fn status(
 
     let config = state.config.read().await;
 
-    let sunshine_info = state.platform.sunshine_status(&config).map_err(|e| {
-        ControlError::ServiceUnavailable(format!("sunshine_status failed: {e}"))
-    })?;
+    let sunshine_info = state
+        .platform
+        .sunshine_status(&config)
+        .map_err(|e| ControlError::ServiceUnavailable(format!("sunshine_status failed: {e}")))?;
 
-    let moonlight_info = state.platform.moonlight_status(&config).map_err(|e| {
-        ControlError::ServiceUnavailable(format!("moonlight_status failed: {e}"))
-    })?;
+    let moonlight_info = state
+        .platform
+        .moonlight_status(&config)
+        .map_err(|e| ControlError::ServiceUnavailable(format!("moonlight_status failed: {e}")))?;
 
     // Touch last_seen for the peer.
     {
@@ -485,6 +501,86 @@ pub async fn pair_accept(
     }
 
     Ok(Json(PairAcceptResponse { accepted: true }))
+}
+
+// ---------------------------------------------------------------------------
+// Shared-control types
+// ---------------------------------------------------------------------------
+
+/// Request body for `POST /v1/shared-control/join`.
+#[derive(Debug, Deserialize)]
+pub struct SharedControlJoinBody {
+    /// Display name of the joining participant (1–64 characters).
+    pub participant_name: String,
+    /// Requested slot index (0–3); the actual assigned slot may differ.
+    pub slot_index: u8,
+}
+
+/// Response body for `POST /v1/shared-control/join`.
+#[derive(Debug, Serialize)]
+pub struct SharedControlJoinResponse {
+    /// The slot index actually assigned by the host.
+    pub slot_index: u8,
+    /// Best-effort path to the virtual input device on the host (Linux only).
+    pub device_path: String,
+}
+
+/// `POST /v1/shared-control/join` — add a remote participant to the active shared-control session.
+///
+/// Requires: `can_start_sunshine` permission (reuses the existing bit).
+/// The host must have an active shared-control session (started via the Tauri
+/// `start_shared_control` command). Returns 503 if no session is active.
+pub async fn shared_control_join(
+    State(state): State<Arc<ControlState>>,
+    Extension(peer_ctx): Extension<PeerContext>,
+    Json(body): Json<SharedControlJoinBody>,
+) -> Result<Json<SharedControlJoinResponse>, ControlError> {
+    if !peer_ctx.peer.permissions.can_start_sunshine {
+        return Err(ControlError::Forbidden(
+            "peer lacks can_start_sunshine permission".into(),
+        ));
+    }
+
+    // Validate inputs (commercial scope: slot 0–3, name 1–64 chars).
+    if body.participant_name.is_empty() || body.participant_name.len() > 64 {
+        return Err(ControlError::InvalidBody(
+            "participant_name must be 1–64 characters".into(),
+        ));
+    }
+    if body.slot_index > 3 {
+        return Err(ControlError::InvalidBody("slot_index must be 0–3".into()));
+    }
+
+    let assigned_slot = {
+        let mut guard = state
+            .shared_control
+            .lock()
+            .map_err(|_| ControlError::Internal("shared_control lock poisoned".into()))?;
+        let session = guard
+            .as_mut()
+            .ok_or(ControlError::SharedControlUnavailable)?;
+        session
+            .add_participant(body.participant_name.clone())
+            .map_err(|e| ControlError::ServiceUnavailable(format!("add_participant failed: {e}")))?
+    };
+
+    // Touch last_seen for the requesting peer.
+    {
+        let mut store = state.peers.write().await;
+        store.touch_last_seen(&peer_ctx.peer.name);
+    }
+
+    tracing::info!(
+        peer = %peer_ctx.peer.name,
+        participant = %body.participant_name,
+        assigned_slot,
+        "shared-control participant joined"
+    );
+
+    Ok(Json(SharedControlJoinResponse {
+        slot_index: assigned_slot,
+        device_path: format!("/dev/input/event{assigned_slot}"),
+    }))
 }
 
 /// `GET /v1/peers` — list trusted peers (sanitized, no raw keys).

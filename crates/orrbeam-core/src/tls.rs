@@ -13,10 +13,10 @@
 use crate::identity::Identity;
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, SanType};
 use rustls::ServerConfig;
-use std::sync::Arc;
 use sha2::{Digest, Sha256};
 use std::net::IpAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, info};
 
@@ -88,10 +88,7 @@ impl TlsIdentity {
             );
             Self::load_from_disk(&cert_path, &key_path)
         } else {
-            info!(
-                node_name,
-                "generating new TLS identity for control plane"
-            );
+            info!(node_name, "generating new TLS identity for control plane");
             Self::generate_and_save(identity, node_name, &cert_path, &key_path)
         }
     }
@@ -107,8 +104,8 @@ impl TlsIdentity {
 
         // Parse the certificate chain.
         let mut cert_reader = BufReader::new(self.cert_pem.as_bytes());
-        let cert_chain: Vec<CertificateDer<'static>> = certs(&mut cert_reader)
-            .collect::<Result<Vec<_>, _>>()?;
+        let cert_chain: Vec<CertificateDer<'static>> =
+            certs(&mut cert_reader).collect::<Result<Vec<_>, _>>()?;
 
         // Parse the private key.
         let mut key_reader = BufReader::new(self.key_pem.as_bytes());
@@ -156,8 +153,8 @@ impl TlsIdentity {
         key_path: &PathBuf,
     ) -> Result<Self, TlsError> {
         use ed25519_dalek::pkcs8::EncodePrivateKey;
-        use rustls::pki_types::PrivatePkcs8KeyDer;
         use rcgen::PKCS_ED25519;
+        use rustls::pki_types::PrivatePkcs8KeyDer;
 
         // Convert the dalek SigningKey to PKCS#8 DER.
         let pkcs8_doc = identity
@@ -218,12 +215,8 @@ impl TlsIdentity {
         std::fs::write(cert_path, &cert_pem)?;
         std::fs::write(key_path, &key_pem)?;
 
-        // Restrict key file permissions on Unix (0o600).
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(key_path, std::fs::Permissions::from_mode(0o600))?;
-        }
+        // Restrict the key file to owner only (chmod 0o600 on Unix; icacls on Windows).
+        crate::secure_file::restrict_to_owner(key_path)?;
 
         info!(
             fingerprint = %cert_sha256_hex,
@@ -260,13 +253,17 @@ impl TlsIdentity {
     /// Path to the control-plane certificate PEM file.
     fn cert_path() -> PathBuf {
         let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-        base.join("orrbeam").join("identity").join("control.cert.pem")
+        base.join("orrbeam")
+            .join("identity")
+            .join("control.cert.pem")
     }
 
     /// Path to the control-plane private key PEM file.
     fn key_path() -> PathBuf {
         let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-        base.join("orrbeam").join("identity").join("control.key.pem")
+        base.join("orrbeam")
+            .join("identity")
+            .join("control.key.pem")
     }
 }
 
@@ -274,30 +271,39 @@ impl TlsIdentity {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use super::*;
+    #[cfg(unix)]
     use crate::identity::Identity;
+    #[cfg(unix)]
     use std::env;
+    #[cfg(unix)]
     use std::sync::{Arc, Mutex};
+    #[cfg(unix)]
     use tempfile::TempDir;
 
     /// Serialize all tests that touch the process-global `XDG_DATA_HOME` env var.
     /// Without this, parallel test threads race on `set_var` and one test may
     /// read another test's (already-dropped) temp directory.
+    #[cfg(unix)]
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     /// Override the XDG_DATA_HOME env var so that `dirs::data_local_dir()` returns
     /// our temp directory, isolating tests from the real user data dir.
+    #[cfg(unix)]
     fn with_temp_data_dir(tmp: &TempDir) {
         // Safety: test-only; caller holds ENV_LOCK.
         unsafe { env::set_var("XDG_DATA_HOME", tmp.path()) };
     }
 
+    #[cfg(unix)]
     fn make_identity() -> Identity {
         Identity::generate().expect("identity generation failed")
     }
 
     // ── generate cert + stable fingerprint ───────────────────────────────────
 
+    #[cfg(unix)]
     #[test]
     fn test_generate_cert_and_stable_fingerprint() {
         let _lock = ENV_LOCK.lock().unwrap();
@@ -305,11 +311,18 @@ mod tests {
         with_temp_data_dir(&tmp);
 
         let id = make_identity();
-        let tls1 = TlsIdentity::load_or_create(&id, "test-node")
-            .expect("first load_or_create failed");
+        let tls1 =
+            TlsIdentity::load_or_create(&id, "test-node").expect("first load_or_create failed");
 
-        assert!(!tls1.cert_sha256_hex.is_empty(), "fingerprint must not be empty");
-        assert_eq!(tls1.cert_sha256_hex.len(), 64, "SHA-256 hex must be 64 chars");
+        assert!(
+            !tls1.cert_sha256_hex.is_empty(),
+            "fingerprint must not be empty"
+        );
+        assert_eq!(
+            tls1.cert_sha256_hex.len(),
+            64,
+            "SHA-256 hex must be 64 chars"
+        );
 
         // Recompute fingerprint from the DER bytes and verify consistency.
         let recomputed = TlsIdentity::sha256_hex(&tls1.cert_der);
@@ -320,7 +333,19 @@ mod tests {
     }
 
     // ── idempotency: calling twice gives the same cert ────────────────────────
+    //
+    // The next three tests use `with_temp_data_dir` to redirect
+    // `dirs::data_local_dir()` via `XDG_DATA_HOME`. That env override is
+    // honoured on Linux (the dirs crate's xdg branch) but ignored on Windows
+    // (SHGetKnownFolderPath always wins) and partially on macOS. The tests
+    // are therefore Unix-only — Windows test runs hit the real
+    // `%LOCALAPPDATA%\orrbeam\identity\` dir, which is shared with the
+    // running app and produces ACL/state contention. Production behaviour
+    // on Windows is covered by the on-host verification protocol in
+    // `docs/verifying_control_plane.md` (load_or_create on a real win11
+    // node both creates and reloads the same cert across orrbeam restarts).
 
+    #[cfg(unix)]
     #[test]
     fn test_load_or_create_is_idempotent() {
         let _lock = ENV_LOCK.lock().unwrap();
@@ -329,10 +354,8 @@ mod tests {
 
         let id = make_identity();
 
-        let tls1 = TlsIdentity::load_or_create(&id, "idempotent-node")
-            .expect("first call failed");
-        let tls2 = TlsIdentity::load_or_create(&id, "idempotent-node")
-            .expect("second call failed");
+        let tls1 = TlsIdentity::load_or_create(&id, "idempotent-node").expect("first call failed");
+        let tls2 = TlsIdentity::load_or_create(&id, "idempotent-node").expect("second call failed");
 
         assert_eq!(
             tls1.cert_sha256_hex, tls2.cert_sha256_hex,
@@ -346,6 +369,7 @@ mod tests {
 
     // ── rustls_server_config succeeds ─────────────────────────────────────────
 
+    #[cfg(unix)]
     #[test]
     fn test_rustls_server_config_succeeds() {
         let _lock = ENV_LOCK.lock().unwrap();
@@ -353,8 +377,7 @@ mod tests {
         with_temp_data_dir(&tmp);
 
         let id = make_identity();
-        let tls = TlsIdentity::load_or_create(&id, "rustls-node")
-            .expect("load_or_create failed");
+        let tls = TlsIdentity::load_or_create(&id, "rustls-node").expect("load_or_create failed");
 
         let config = tls.rustls_server_config();
         assert!(
@@ -371,6 +394,7 @@ mod tests {
 
     // ── Arc<ServerConfig> — config can be shared across threads ──────────────
 
+    #[cfg(unix)]
     #[test]
     fn test_rustls_server_config_is_send_sync() {
         let _lock = ENV_LOCK.lock().unwrap();

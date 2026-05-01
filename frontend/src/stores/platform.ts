@@ -8,6 +8,28 @@ export interface PlatformInfo {
   hostname: string;
 }
 
+/**
+ * Render an OS identifier as a user-friendly label.
+ *
+ * Audit (2026-04-27): the orrbeam frontend has NO hardcoded
+ * Linux/macOS/Windows paths in user-visible strings — all platform-specific
+ * resolution happens in the Rust backend (sunshine_conf::conf_path,
+ * orrbeam-platform binary discovery, secure_file ACL helper). Components
+ * that need to vary by OS should switch on `info.os` here.
+ */
+export function osDisplayName(os: string): string {
+  switch (os) {
+    case "linux":
+      return "Linux";
+    case "macos":
+      return "macOS";
+    case "windows":
+      return "Windows";
+    default:
+      return os;
+  }
+}
+
 export interface PublicIdentity {
   fingerprint: string;
   public_key: number[];

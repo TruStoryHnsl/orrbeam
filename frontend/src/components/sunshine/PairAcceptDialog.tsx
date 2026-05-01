@@ -3,18 +3,10 @@ import { invoke } from "@/api/tauri";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 
-export function PairAcceptDialog({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+export function PairAcceptDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [pin, setPin] = useState("");
   const [clientName, setClientName] = useState("");
-  const [state, setState] = useState<"idle" | "submitting" | "done" | "error">(
-    "idle",
-  );
+  const [state, setState] = useState<"idle" | "submitting" | "done" | "error">("idle");
   const [error, setError] = useState("");
 
   const submit = async () => {
@@ -50,8 +42,8 @@ export function PairAcceptDialog({
       {state === "idle" && (
         <div className="space-y-3">
           <p className="text-xs text-neutral-400">
-            A remote Moonlight client is trying to pair with your Sunshine.
-            Enter the 4-digit PIN shown on the remote machine.
+            A remote Moonlight client is trying to pair with your Sunshine. Enter the 4-digit PIN
+            shown on the remote machine.
           </p>
 
           {/* PIN input */}
@@ -93,21 +85,16 @@ export function PairAcceptDialog({
 
       {state === "submitting" && (
         <div className="text-center py-4">
-          <div className="text-xs text-neutral-400 mb-2">
-            Submitting PIN to Sunshine...
-          </div>
+          <div className="text-xs text-neutral-400 mb-2">Submitting PIN to Sunshine...</div>
           <p className="text-[11px] text-neutral-500">
-            This may take up to 15 seconds while waiting for the pairing
-            handshake.
+            This may take up to 15 seconds while waiting for the pairing handshake.
           </p>
         </div>
       )}
 
       {state === "done" && (
         <div className="space-y-3 text-center py-2">
-          <div className="text-green-400 text-sm font-medium">
-            Pairing successful
-          </div>
+          <div className="text-green-400 text-sm font-medium">Pairing successful</div>
           <p className="text-xs text-neutral-400">
             The remote client is now authorized to stream from your Sunshine.
           </p>
@@ -119,14 +106,8 @@ export function PairAcceptDialog({
 
       {state === "error" && (
         <div className="space-y-3">
-          <div className="text-xs text-red-400 bg-red-500/10 rounded px-3 py-2">
-            {error}
-          </div>
-          <Button
-            variant="ghost"
-            onClick={() => setState("idle")}
-            className="w-full"
-          >
+          <div className="text-xs text-red-400 bg-red-500/10 rounded px-3 py-2">{error}</div>
+          <Button variant="ghost" onClick={() => setState("idle")} className="w-full">
             Try Again
           </Button>
         </div>

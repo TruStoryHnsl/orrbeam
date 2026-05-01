@@ -1,11 +1,14 @@
 mod commands;
+pub mod error;
 mod tray;
+
+pub use error::AppError;
 
 use orrbeam_core::{Config, Identity, NodeRegistry};
 use orrbeam_net::DiscoveryManager;
 use orrbeam_platform::get_platform;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
@@ -23,7 +26,18 @@ pub struct AppState {
     /// This `Arc` is shared with [`orrbeam_net::server::ControlState`] so that
     /// the server's inbound-request handlers and the Tauri command layer both
     /// read/write the same map.
-    pub pending_mutual_trust: Arc<RwLock<std::collections::HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>>,
+    pub pending_mutual_trust:
+        Arc<RwLock<std::collections::HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>>,
+    /// Active shared-control session, if any.
+    ///
+    /// This `Arc` is shared with [`orrbeam_net::server::ControlState`] so that
+    /// the HTTP control server's join endpoint and the Tauri command layer both
+    /// operate on the same live session.
+    pub shared_control: Arc<
+        Mutex<
+            Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>,
+        >,
+    >,
     pub control_shutdown: CancellationToken,
 }
 
@@ -50,11 +64,51 @@ impl orrbeam_net::server::EventEmitter for TauriEventEmitter {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        "orrbeam=info,orrbeam_app=info,orrbeam_core=info,orrbeam_net=info,orrbeam_platform=info"
+            .into()
+    });
+
+    // In packaged release builds, also write a rolling log file.
+    #[cfg(not(debug_assertions))]
+    {
+        use std::path::PathBuf;
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+
+        // Pick a per-platform log directory:
+        // - Linux:   $XDG_STATE_HOME/orrbeam/logs   (default ~/.local/state/orrbeam/logs)
+        // - macOS:   ~/Library/Application Support/orrbeam/logs (state_dir is None on macOS)
+        // - Windows: %LOCALAPPDATA%\orrbeam\logs
+        // dirs::state_dir() returns None on Windows and macOS, so fall back to
+        // data_local_dir() (LOCALAPPDATA on Windows, ~/Library/App Support on macOS).
+        let log_dir: PathBuf = dirs::state_dir()
+            .or_else(dirs::data_local_dir)
+            .or_else(dirs::home_dir)
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("orrbeam")
+            .join("logs");
+        let _ = std::fs::create_dir_all(&log_dir);
+        let file_appender = tracing_appender::rolling::daily(&log_dir, "orrbeam.log");
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+        // Leak the guard so the background thread lives for the process lifetime.
+        Box::leak(Box::new(_guard));
+
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .with_writer(non_blocking),
+            )
+            .with(tracing_subscriber::fmt::layer().pretty())
+            .init();
+    }
+
+    #[cfg(debug_assertions)]
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "orrbeam=info".into()),
-        )
+        .with_env_filter(env_filter)
+        .pretty()
         .init();
 
     let config = Config::load().unwrap_or_else(|e| {
@@ -62,9 +116,7 @@ pub fn run() {
         Config::default()
     });
 
-    let identity = Arc::new(
-        Identity::load_or_create().expect("failed to initialize identity"),
-    );
+    let identity = Arc::new(Identity::load_or_create().expect("failed to initialize identity"));
     tracing::info!("node identity: {}", identity.fingerprint());
 
     // Load TLS identity (cert derived from Ed25519 key).
@@ -88,12 +140,24 @@ pub fn run() {
     // Shared map for in-flight mutual-trust TOFU requests.  The same Arc is
     // given to both AppState (for Tauri commands) and ControlState (for the
     // HTTP server inbound handler) so they always operate on the same data.
-    let pending_mutual_trust: Arc<RwLock<HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>> =
-        Arc::new(RwLock::new(HashMap::new()));
+    let pending_mutual_trust: Arc<
+        RwLock<HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>,
+    > = Arc::new(RwLock::new(HashMap::new()));
 
-    let registry = Arc::new(RwLock::new(NodeRegistry::new()));
+    let registry = Arc::new(RwLock::new(NodeRegistry::load().unwrap_or_else(|e| {
+        tracing::warn!("failed to load node registry, starting fresh: {e}");
+        NodeRegistry::new()
+    })));
     let platform = get_platform();
     let config_arc = Arc::new(RwLock::new(config.clone()));
+
+    // Shared-control session — shared between AppState (Tauri commands) and
+    // ControlState (HTTP server join endpoint) via the same Arc.
+    let shared_control: Arc<
+        Mutex<
+            Option<Box<dyn orrbeam_platform::shared_control::SharedControlSession + Send + Sync>>,
+        >,
+    > = Arc::new(Mutex::new(None));
 
     let state = AppState {
         config: config_arc.clone(),
@@ -103,6 +167,7 @@ pub fn run() {
         tls: tls.clone(),
         peers: peers.clone(),
         pending_mutual_trust: pending_mutual_trust.clone(),
+        shared_control: shared_control.clone(),
         control_shutdown: control_shutdown.clone(),
     };
 
@@ -189,10 +254,18 @@ pub fn run() {
             commands::remote::remote_peer_status,
             commands::discovery::get_nodes,
             commands::discovery::get_node_count,
+            commands::discovery::add_node,
+            commands::discovery::remove_node,
+            commands::discovery::list_nodes,
             commands::settings::get_config,
             commands::settings::save_config,
             commands::settings::get_identity,
             commands::settings::get_tls_fingerprint,
+            commands::shared_control::start_shared_control,
+            commands::shared_control::stop_shared_control,
+            commands::shared_control::add_sc_participant,
+            commands::shared_control::remove_sc_participant,
+            commands::shared_control::list_sc_participants,
         ])
         .setup(|app| {
             let app_state = app.state::<AppState>();
@@ -213,8 +286,12 @@ pub fn run() {
                 nonces: orrbeam_net::server::NonceCache::new(),
                 pending_mutual_trust: app_state.pending_mutual_trust.clone(),
                 platform: app_state.platform.clone(),
+                shared_control: app_state.shared_control.clone(),
                 event_emitter: emitter,
                 shutdown: app_state.control_shutdown.clone(),
+                ip_tofu_attempts: Arc::new(tokio::sync::RwLock::new(
+                    std::collections::HashMap::new(),
+                )),
             });
 
             // Determine bind address from config.

@@ -47,9 +47,8 @@ impl PinnedVerifier {
     /// Returns [`ClientError::InvalidResponse`] if `pinned_sha256_hex` is not
     /// valid lowercase hex or does not decode to exactly 32 bytes.
     pub fn new(pinned_sha256_hex: &str) -> Result<Self, ClientError> {
-        let bytes = hex::decode(pinned_sha256_hex).map_err(|e| {
-            ClientError::InvalidResponse(format!("bad cert_sha256 hex: {e}"))
-        })?;
+        let bytes = hex::decode(pinned_sha256_hex)
+            .map_err(|e| ClientError::InvalidResponse(format!("bad cert_sha256 hex: {e}")))?;
         Ok(Self {
             pinned_sha256: bytes,
         })

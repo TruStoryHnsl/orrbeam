@@ -1,3 +1,14 @@
+//! Network and discovery layer for the orrbeam mesh.
+//!
+//! This crate provides:
+//! - [`DiscoveryManager`] — orchestrates mDNS and orrtellite node discovery.
+//! - [`client`] — signed HTTPS client for node-to-node control-plane calls.
+//! - [`server`] — axum-based TLS control-plane server with Ed25519 auth middleware.
+//! - [`mdns`] — mDNS browse/register using `_orrbeam._tcp`.
+//! - [`orrtellite`] — Headscale API polling for mesh node discovery.
+
+#![warn(missing_docs)]
+
 pub mod client;
 pub mod mdns;
 pub mod orrtellite;
@@ -10,12 +21,16 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
 
+/// Errors that can occur during node discovery.
 #[derive(Error, Debug)]
 pub enum DiscoveryError {
+    /// An mDNS operation failed.
     #[error("mDNS error: {0}")]
     Mdns(String),
+    /// An orrtellite (Headscale) operation failed.
     #[error("orrtellite error: {0}")]
     Orrtellite(String),
+    /// A network request failed.
     #[error("network error: {0}")]
     Network(#[from] reqwest::Error),
 }
@@ -49,6 +64,7 @@ pub struct DiscoveryManager {
 }
 
 impl DiscoveryManager {
+    /// Create a new [`DiscoveryManager`] bound to `config` and `registry`.
     pub fn new(config: Config, registry: Arc<RwLock<NodeRegistry>>) -> Self {
         Self {
             registry,
@@ -61,7 +77,10 @@ impl DiscoveryManager {
     ///
     /// If `registration` is `Some` and mDNS is enabled, this node will also
     /// advertise itself on the LAN so peers can discover it via mDNS.
-    pub async fn start(&mut self, registration: Option<RegistrationInfo>) -> Result<(), DiscoveryError> {
+    pub async fn start(
+        &mut self,
+        registration: Option<RegistrationInfo>,
+    ) -> Result<(), DiscoveryError> {
         if self.config.mdns_enabled {
             tracing::info!("starting mDNS discovery");
             let registry = self.registry.clone();
@@ -72,7 +91,10 @@ impl DiscoveryManager {
             });
 
             if let Some(ref reg_info) = registration {
-                tracing::info!("registering this node via mDNS as '{}'", self.config.node_name);
+                tracing::info!(
+                    "registering this node via mDNS as '{}'",
+                    self.config.node_name
+                );
                 let daemon = mdns::register(&self.config.node_name, reg_info)?;
                 self._mdns_registration = Some(daemon);
             }
@@ -92,7 +114,8 @@ impl DiscoveryManager {
 
         // Add static nodes
         {
-            let mut reg: tokio::sync::RwLockWriteGuard<'_, NodeRegistry> = self.registry.write().await;
+            let mut reg: tokio::sync::RwLockWriteGuard<'_, NodeRegistry> =
+                self.registry.write().await;
             for entry in &self.config.static_nodes {
                 if let Ok(addr) = entry.address.parse::<IpAddr>() {
                     reg.upsert(Node {
@@ -107,6 +130,7 @@ impl DiscoveryManager {
                         os: None,
                         encoder: None,
                         cert_sha256: None,
+                        last_seen: None,
                     });
                 }
             }
