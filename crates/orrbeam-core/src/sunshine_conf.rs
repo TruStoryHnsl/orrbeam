@@ -72,6 +72,13 @@ impl SunshineSettings {
 }
 
 /// Platform-appropriate sunshine.conf path.
+///
+/// - **Linux**: `$XDG_CONFIG_HOME/sunshine/sunshine.conf` (default `~/.config/sunshine/sunshine.conf`).
+/// - **macOS**: `~/Library/Application Support/Sunshine/sunshine.conf` if it
+///   exists; otherwise the same `dirs::config_dir()` fallback as Linux.
+/// - **Windows**: `%PROGRAMDATA%\Sunshine\config\sunshine.conf` (LizardByte's
+///   default install location for Sunshine 2024+) if it exists; then
+///   `%APPDATA%\Sunshine\sunshine.conf`; finally `dirs::config_dir()` fallback.
 pub fn conf_path() -> PathBuf {
     #[cfg(target_os = "macos")]
     {
@@ -84,10 +91,57 @@ pub fn conf_path() -> PathBuf {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(programdata) = std::env::var_os("PROGRAMDATA") {
+            let p = PathBuf::from(programdata)
+                .join("Sunshine")
+                .join("config")
+                .join("sunshine.conf");
+            if p.exists() {
+                return p;
+            }
+        }
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            let p = PathBuf::from(appdata)
+                .join("Sunshine")
+                .join("sunshine.conf");
+            if p.exists() {
+                return p;
+            }
+        }
+    }
+
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("sunshine")
         .join("sunshine.conf")
+}
+
+/// Compute the Windows `conf_path()` from explicitly supplied environment
+/// values. Exposed for unit tests; also useful for tooling that needs to
+/// resolve the conf path on a remote Windows host.
+#[cfg(target_os = "windows")]
+pub fn conf_path_windows_from_env(
+    programdata: Option<&str>,
+    appdata: Option<&str>,
+) -> Option<PathBuf> {
+    if let Some(pd) = programdata {
+        let p = PathBuf::from(pd)
+            .join("Sunshine")
+            .join("config")
+            .join("sunshine.conf");
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    if let Some(ad) = appdata {
+        let p = PathBuf::from(ad).join("Sunshine").join("sunshine.conf");
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    None
 }
 
 /// Parse sunshine.conf into key=value pairs.

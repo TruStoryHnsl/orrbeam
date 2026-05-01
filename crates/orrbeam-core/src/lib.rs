@@ -16,6 +16,7 @@ pub mod config;
 pub mod identity;
 pub mod node;
 pub mod peers;
+pub mod secure_file;
 pub mod sunshine_api;
 pub mod sunshine_conf;
 pub mod tls;
