@@ -2,6 +2,11 @@
 target/
 src-tauri/target/
 Cargo.lock
+**/*.rs.bk
+
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/gen/
 
 # Frontend
 node_modules/
@@ -28,6 +33,14 @@ __pycache__/
 # IDE
 .vscode/
 .idea/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
 
 # OS
 .DS_Store

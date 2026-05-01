@@ -1,6 +1,6 @@
 use crate::AppState;
 use crate::error::AppError;
-use orrbeam_core::{Node, NodeState};
+use orrbeam_core::{DiscoverySource, Node, NodeState};
 use serde::Deserialize;
 use std::net::IpAddr;
 use tauri::State;
@@ -24,9 +24,17 @@ pub struct AddNodeInput {
     pub name: String,
     pub address: String,
     pub port: u16,
+    /// Optional Ed25519 fingerprint (first 16 hex chars of the node's public
+    /// key). When supplied at add-time, mutual-trust steps can short-circuit
+    /// fingerprint TOFU.
+    #[serde(default)]
+    pub fingerprint: Option<String>,
 }
 
 /// Add a node to the registry manually and persist the registry to disk.
+///
+/// The node is inserted with `NodeState::Offline` so it renders greyed-out
+/// until discovery confirms it online.
 #[tauri::command]
 pub async fn add_node(state: State<'_, AppState>, node: AddNodeInput) -> Result<(), AppError> {
     // Input validation
@@ -52,8 +60,8 @@ pub async fn add_node(state: State<'_, AppState>, node: AddNodeInput) -> Result<
         address,
         port: node.port,
         state: NodeState::Offline,
-        source: orrbeam_core::node::DiscoverySource::Static,
-        fingerprint: None,
+        source: DiscoverySource::Static,
+        fingerprint: node.fingerprint.clone(),
         sunshine_available: false,
         moonlight_available: false,
         os: None,

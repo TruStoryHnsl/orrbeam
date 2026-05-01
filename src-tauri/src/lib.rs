@@ -144,6 +144,7 @@ pub fn run() {
         RwLock<HashMap<uuid::Uuid, orrbeam_net::server::PendingMutualTrust>>,
     > = Arc::new(RwLock::new(HashMap::new()));
 
+    // Load the persistent registry from disk; fall back to empty on first run.
     let registry = Arc::new(RwLock::new(NodeRegistry::load().unwrap_or_else(|e| {
         tracing::warn!("failed to load node registry, starting fresh: {e}");
         NodeRegistry::new()

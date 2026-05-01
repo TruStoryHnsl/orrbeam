@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use thiserror::Error;
+use time::OffsetDateTime;
 
 /// Current state of a node in the mesh.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,9 +59,14 @@ pub struct Node {
     /// SHA-256 fingerprint of the node's TLS certificate (hex).
     #[serde(default)]
     pub cert_sha256: Option<String>,
-    /// Timestamp of the last time this node was seen via discovery.
-    #[serde(default, with = "time::serde::rfc3339::option")]
-    pub last_seen: Option<time::OffsetDateTime>,
+    /// Timestamp of the last time this node was seen on the mesh.
+    /// `None` for nodes that have never been observed (manually added).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "time::serde::rfc3339::option"
+    )]
+    pub last_seen: Option<OffsetDateTime>,
 }
 
 /// Errors that can occur while loading or saving the node registry.
@@ -90,9 +96,9 @@ impl NodeRegistry {
         Self::default()
     }
 
-    /// Insert or update a node and stamp `last_seen` with the current UTC time.
+    /// Insert or update a node, recording `last_seen` as now.
     pub fn upsert(&mut self, mut node: Node) {
-        node.last_seen = Some(time::OffsetDateTime::now_utc());
+        node.last_seen = Some(OffsetDateTime::now_utc());
         self.nodes.insert(node.name.clone(), node);
     }
 
@@ -129,39 +135,68 @@ impl NodeRegistry {
             .count()
     }
 
-    /// Path to the persistent node registry file.
+    // ── Persistence ──────────────────────────────────────────────────────────
+
+    /// Path to the persistent node registry file:
+    /// `~/.config/orrbeam/known_nodes.yaml`.
     pub fn persistence_path() -> PathBuf {
         let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
         base.join("orrbeam").join("known_nodes.yaml")
     }
 
-    /// Load the registry from disk.
-    /// Returns an empty registry (not an error) if the file does not exist yet.
-    pub fn load() -> Result<Self, NodeRegistryError> {
-        let path = Self::persistence_path();
-        if path.exists() {
-            let contents = std::fs::read_to_string(&path)?;
-            Ok(serde_yaml::from_str(&contents)?)
-        } else {
-            Ok(Self::default())
-        }
+    /// Alias for [`Self::persistence_path`]. Retained for callers using the
+    /// older naming.
+    pub fn default_path() -> PathBuf {
+        Self::persistence_path()
     }
 
-    /// Save the registry to disk, creating parent directories as needed.
+    /// Load the registry from disk at the default `persistence_path()`.
+    /// Returns an empty registry (not an error) if the file does not exist yet.
+    pub fn load() -> Result<Self, NodeRegistryError> {
+        Self::load_from(Self::persistence_path())
+    }
+
+    /// Load the registry from a YAML file at `path`. Returns an empty
+    /// registry if the file does not exist.
+    pub fn load_from(path: impl AsRef<std::path::Path>) -> Result<Self, NodeRegistryError> {
+        let path = path.as_ref();
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let contents = std::fs::read_to_string(path)?;
+        Ok(serde_yaml::from_str(&contents)?)
+    }
+
+    /// Save the registry to disk at the default `persistence_path()`.
     pub fn save(&self) -> Result<(), NodeRegistryError> {
-        let path = Self::persistence_path();
+        self.save_to(Self::persistence_path())
+    }
+
+    /// Save the registry to a YAML file at `path`, creating parent directories
+    /// as needed.
+    pub fn save_to(&self, path: impl AsRef<std::path::Path>) -> Result<(), NodeRegistryError> {
+        let path = path.as_ref();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
         let yaml = serde_yaml::to_string(self)?;
-        std::fs::write(&path, yaml)?;
+        std::fs::write(path, yaml)?;
         Ok(())
     }
 
-    /// Add a node manually (used by UI). Marks state as `Offline` since reachability
-    /// is unknown until discovery confirms it.
+    /// Add a node manually (used by UI). Marks state as `Offline` since
+    /// reachability is unknown until discovery confirms it.
     pub fn add_manual(&mut self, node: Node) {
         self.nodes.insert(node.name.clone(), node);
+    }
+
+    /// Mark a node offline (sets state to `Offline`) without removing it from
+    /// the persistent store, so it continues to appear in the UI with a greyed
+    /// status.
+    pub fn mark_offline(&mut self, name: &str) {
+        if let Some(node) = self.nodes.get_mut(name) {
+            node.state = NodeState::Offline;
+        }
     }
 }
 
@@ -252,11 +287,8 @@ mod tests {
         let mut reg = NodeRegistry::new();
         reg.upsert(make_node("persist-me", true));
 
-        let yaml = serde_yaml::to_string(&reg).unwrap();
-        std::fs::write(&path, &yaml).unwrap();
-
-        let contents = std::fs::read_to_string(&path).unwrap();
-        let loaded: NodeRegistry = serde_yaml::from_str(&contents).unwrap();
+        reg.save_to(&path).unwrap();
+        let loaded = NodeRegistry::load_from(&path).unwrap();
         assert!(loaded.get("persist-me").is_some());
     }
 }
