@@ -51,15 +51,22 @@ mod windows_impl {
 
     /// Best-effort ACL restriction via `icacls`.
     ///
-    /// Steps (each step's failure is logged but does not abort):
-    /// 1. `icacls <path> /inheritance:r`     — strip inherited ACEs.
-    /// 2. `icacls <path> /grant:r <user>:RW` — grant the current user only.
+    /// Order matters: we GRANT first, then strip inheritance. The reverse order
+    /// (strip then grant) leaves the file inaccessible if the grant fails — and
+    /// the grant is the brittle step because principal-name resolution can fail
+    /// in workgroup setups where `%USERDOMAIN%` is the literal string
+    /// "WORKGROUP" rather than a real SID-resolvable domain.
     ///
-    /// `<user>` is `%USERDOMAIN%\%USERNAME%` if both are set, otherwise just
-    /// `%USERNAME%`. If neither is set we skip the grant and only run step 1
-    /// (which still removes inheritance and leaves no explicit ACE — the file
-    /// becomes inaccessible until the user reclaims ownership, so we do NOT
-    /// run step 1 alone; we early-return Ok).
+    /// Principal resolution tries, in order:
+    /// 1. `%USERNAME%` alone — works on local-account workgroup machines where
+    ///    `WORKGROUP\<user>` does NOT resolve.
+    /// 2. `%COMPUTERNAME%\%USERNAME%` — works on most workgroup machines as the
+    ///    canonical local-account form.
+    /// 3. `%USERDOMAIN%\%USERNAME%` — works on domain-joined machines.
+    ///
+    /// We accept the first form that icacls accepts. If all three fail we log
+    /// and bail out WITHOUT touching inheritance, so the file stays accessible
+    /// under its default ACLs (less secure but never inaccessible).
     pub(super) fn restrict_to_owner(path: &Path) -> std::io::Result<()> {
         let username = match std::env::var("USERNAME") {
             Ok(u) if !u.is_empty() => u,
@@ -72,10 +79,17 @@ mod windows_impl {
             }
         };
 
-        let principal = match std::env::var("USERDOMAIN") {
-            Ok(d) if !d.is_empty() => format!(r"{d}\{username}"),
-            _ => username,
-        };
+        let mut candidates: Vec<String> = vec![username.clone()];
+        if let Ok(c) = std::env::var("COMPUTERNAME") {
+            if !c.is_empty() {
+                candidates.push(format!(r"{c}\{username}"));
+            }
+        }
+        if let Ok(d) = std::env::var("USERDOMAIN") {
+            if !d.is_empty() && d != "WORKGROUP" {
+                candidates.push(format!(r"{d}\{username}"));
+            }
+        }
 
         let path_str = match path.to_str() {
             Some(s) => s,
@@ -88,34 +102,53 @@ mod windows_impl {
             }
         };
 
-        // Step 1: disable inheritance + drop inherited ACEs.
-        match Command::new("icacls")
-            .args([path_str, "/inheritance:r"])
-            .output()
-        {
-            Ok(out) if out.status.success() => {}
-            Ok(out) => {
-                tracing::warn!(
-                    path = %path.display(),
-                    stderr = %String::from_utf8_lossy(&out.stderr).trim(),
-                    "secure_file: icacls /inheritance:r failed; continuing"
-                );
-                // Don't try the grant — file may still have inherited ACLs.
-                return Ok(());
-            }
-            Err(e) => {
-                tracing::warn!(
-                    path = %path.display(),
-                    error = %e,
-                    "secure_file: icacls not available; file retains default ACLs"
-                );
-                return Ok(());
+        // Step 1: try each candidate principal until icacls accepts one.
+        // (M) = Modify = R + W + D (delete) + write-attributes. Without D, a
+        // subsequent `std::fs::write` to the same path would fail with
+        // PermissionDenied because Windows treats file replacement as a
+        // delete-then-create. (R,W) alone is too restrictive in practice.
+        let mut applied_principal: Option<String> = None;
+        for candidate in &candidates {
+            match Command::new("icacls")
+                .args([path_str, "/grant:r", &format!("{candidate}:(M)")])
+                .output()
+            {
+                Ok(out) if out.status.success() => {
+                    applied_principal = Some(candidate.clone());
+                    break;
+                }
+                Ok(out) => {
+                    tracing::debug!(
+                        path = %path.display(),
+                        candidate = %candidate,
+                        stderr = %String::from_utf8_lossy(&out.stderr).trim(),
+                        "secure_file: icacls /grant:r rejected this principal; trying next"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        path = %path.display(),
+                        error = %e,
+                        "secure_file: icacls not available; file retains default ACLs"
+                    );
+                    return Ok(());
+                }
             }
         }
 
-        // Step 2: grant the current user RW only.
+        let Some(principal) = applied_principal else {
+            tracing::warn!(
+                path = %path.display(),
+                tried = ?candidates,
+                "secure_file: no principal resolved; file retains default ACLs"
+            );
+            return Ok(());
+        };
+
+        // Step 2: now that the user has an explicit ACE, drop inherited ACEs.
+        // If this fails, the file is still accessible (just less restricted).
         match Command::new("icacls")
-            .args([path_str, "/grant:r", &format!("{principal}:(R,W)")])
+            .args([path_str, "/inheritance:r"])
             .output()
         {
             Ok(out) if out.status.success() => {
@@ -129,14 +162,14 @@ mod windows_impl {
                 tracing::warn!(
                     path = %path.display(),
                     stderr = %String::from_utf8_lossy(&out.stderr).trim(),
-                    "secure_file: icacls /grant:r failed; file may be inaccessible"
+                    "secure_file: icacls /inheritance:r failed; file is accessible but inheritance not stripped"
                 );
             }
             Err(e) => {
                 tracing::warn!(
                     path = %path.display(),
                     error = %e,
-                    "secure_file: icacls grant failed"
+                    "secure_file: icacls /inheritance:r spawn failed"
                 );
             }
         }

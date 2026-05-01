@@ -3,8 +3,17 @@
 //! These tests verify the Platform trait's process lifecycle management
 //! using mock/stub binaries in a temp directory.
 //!
+//! The mock binaries are POSIX shell scripts marked executable via chmod 0o755,
+//! so the entire suite is gated to `cfg(unix)`. The Windows platform impl is
+//! covered by the unit tests inside `crates/orrbeam-platform/src/windows.rs`
+//! (binary path resolution, env-driven candidate generation) — actual
+//! Sunshine/Moonlight process management on Windows is verified manually
+//! per `docs/verifying_control_plane.md`.
+//!
 //! Real-hardware tests (actual GPU detection, actual Sunshine/Moonlight) are
 //! marked `#[ignore]` and must be run explicitly with `cargo test -- --ignored`.
+
+#![cfg(unix)]
 
 use orrbeam_core::config::Config;
 use orrbeam_platform::ServiceStatus;
