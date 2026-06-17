@@ -21,7 +21,7 @@ anyhow = "1"
 
 # Control plane (WI-1, added for commercial-rigor phase 5)
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "tower-log", "tracing", "macros"] }
-axum-server = { version = "0.7", features = ["tls-rustls"] }
+axum-server = { version = "0.8", features = ["tls-rustls"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "limit", "timeout"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
